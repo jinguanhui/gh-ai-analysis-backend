@@ -1,0 +1,91 @@
+# DataSource Config
+spring:
+  # application.yml
+  ai:
+    dashscope:
+      api-key: sk-f22e48e3c1b543b3a664ba81fe89bdc0
+      # 连接超时配置
+      connect-timeout: 30
+      read-timeout: 60
+      write-timeout: 60
+    chat:
+      options:
+        model: qwen-plus
+        enable_search: true
+  web:
+    reactive:
+      client:
+        # HTTP客户端连接池配置
+        connection-pool:
+          max-connections: 100
+          max-idle-time: 30
+          # 连接超时配置
+          connect-timeout: 30000
+          response-timeout: 60000
+  application:
+    name: gh_ai_analysis
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    username: root
+    password: 1234
+    url: jdbc:mysql://localhost:3306/gh_ai_analysis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      lettuce:
+        pool:
+          max-idle: 16
+          max-active: 32
+          min-idle: 8
+# searchApi
+search-api:
+  api-key: 1D5oZXDWLkY2Q57N5hXrYPac
+
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+  reactive:
+    session:
+      timeout: 600m
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+  global-config:
+    db-config:
+      logic-delete-field: isDelete # 全局逻辑删除的实体字段名(since 3.3.0,配置后可以忽略不配置步骤2)
+      logic-delete-value: 1 # 逻辑已删除值(默认为 1)
+      logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)
+
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.jgh.aianalysis.controller
+knife4j:
+  enable: false
+  setting:
+    language: zh_cn
+
+# application.yml
+dubbo:
+  registry:
+    address: nacos://${nacos.address:127.0.0.1}:8848?username=nacos&password=nacos
+    # This will enable application-level service discovery only (the recommended service discovery method for Dubbo3).
+    # For users upgrading from Dubbo2.x, please set the value to 'all' for smooth migration.
+    register-mode: instance
+  protocol:
+    name: tri
+    port: 50051
+  application:
+    name: dubbo-springboot-provider
+    logger: slf4j

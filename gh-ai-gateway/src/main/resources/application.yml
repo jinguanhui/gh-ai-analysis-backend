@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: gh-ai-gateway
+  cloud:
+    # 在Gateway网关中配置跨域
+    #    gateway:
+    #      globalcors:
+    #        cors-configurations:
+    #          '[/**]':
+    #            allowedOrigins: "*"
+    #            allowedHeaders: "*"
+    #            allowedMethods: "*"
+    #            allowCredentials: true  # 添加这一行以支持cookie
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                #                allowedOrigins: "*"    allowedOriginPatterns可解决
+                allowedOriginPatterns: "*"
+                allowedHeaders: "*"
+                allowedMethods:
+                  - "GET"
+                  - "POST"
+                  - "DELETE"
+                  - "PUT"
+                  - "OPTIONS"
+                #                allowedOrigins: "*"和下面的allowCredentials: true配置冲突，只能选一个
+                allowCredentials: true  # 添加这一行以支持cookie
+                maxAge: 3600
+          routes:
+            - id: user_route
+              uri: http://localhost:8123
+              predicates:
+                - Path=/api/**
+              filters:
+                - AddRequestHeader=auth, ghai
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      lettuce:
+        pool:
+          max-idle: 16
+          max-active: 32
+          min-idle: 8
+
+#      没有设置密码就不需要填
+#      password:
+server:
+  port: 8124
+  servlet:
+    context-path: /api
+
+# application.yml
+dubbo:
+  registry:
+    address: nacos://${nacos.address:127.0.0.1}:8848?username=nacos&password=nacos
+    # This will enable application-level service discovery only (the recommended service discovery method for Dubbo3).
+    # For users upgrading from Dubbo2.x, please set the value to 'all' for smooth migration.
+    register-mode: instance
+  application:
+    name: dubbo-springboot-consumer
+    logger: slf4j
+    qos-port: 33333
+    qos-enable: true
