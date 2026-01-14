@@ -1,33 +1,27 @@
 package com.jgh.aianalysis.handler;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.AccessKeyService;
-import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.IPUtils;
-import com.jgh.ghcommon.model.entity.AccessKey;
-import com.jgh.ghcommon.model.entity.User;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.binary.Base64;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.ModelAndView;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-@Slf4j
 @Component
+@Slf4j
+@RequiredArgsConstructor
 public class MyInterceptor implements HandlerInterceptor {
 
-    private final AccessKeyService accessKeyService;
-    private final UserService userService;
-
-    public MyInterceptor(AccessKeyService accessKeyService, UserService userService) {
-        this.accessKeyService = accessKeyService;
-        this.userService = userService;
-    }
+    @Resource
+    private AccessKeyService accessKeyService;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -39,32 +33,29 @@ public class MyInterceptor implements HandlerInterceptor {
         String localHost = request.getLocalAddr();
         String cookie = Arrays.toString(request.getCookies());
         String url = request.getServletPath();
-        log.info(request.getHeader("userId"));
         log.info("用户的请求URL:{}", requestURL);
         log.info("用户的请求方法:{}", requestMethod);
         log.info("用户的请求IP:{}", IPUtils.getIpAddr(request));
         log.info("用户的请求头:{}", header);
         log.info("用户的Cookie:{}", cookie);
         log.info("用户的请求地址:{}", localHost);
+        log.info("用户的请求ServletPath:{}", url);
 
         if (auth == null || !auth.equals("ghai")) {
             log.error("该请求不是从网关中转发的，拦截违法路径");
             return false;
         }
 
-        if (url.contains("/chart/gen")) {
-            Long userId = Long.valueOf(request.getHeader("userId"));
-            String encryptPublicKey = request.getHeader("signature");
-
-            QueryWrapper<AccessKey> wrapper = new QueryWrapper<>();
-            wrapper.eq("userId", userId);
-            AccessKey accessKey = accessKeyService.getOne(wrapper);
-            String privateKey = accessKey.getPrivateKey();
-            String aesKey = accessKey.getAesKey();
-
-            String salt = null;
-
-
+        if (request.getServletPath().equals("/chart/gen")) {
+            // 检查是否为multipart请求
+            if (request.getContentType() != null && request.getContentType().toLowerCase().startsWith("multipart/")) {
+                // 对于multipart请求，我们需要自定义包装器来处理解密
+                CustomMultipartHttpServletRequest customMultipartHttpServletRequest
+                        = new CustomMultipartHttpServletRequest(request, accessKeyService);
+                // 通过RequestContextHolder设置包装后的请求
+                org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                        new org.springframework.web.context.request.ServletRequestAttributes(customMultipartHttpServletRequest, response), true);
+            }
         }
 
         return true;
@@ -73,6 +64,5 @@ public class MyInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
         HandlerInterceptor.super.afterCompletion(request, response, handler, ex);
-
     }
 }

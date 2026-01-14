@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jgh.aianalysis.ai.AnalysisAi;
 import com.jgh.aianalysis.annotation.AuthCheck;
 import com.jgh.aianalysis.exception.BusinessException;
+import com.jgh.aianalysis.handler.CustomMultipartHttpServletRequest;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
@@ -105,17 +106,39 @@ public class ChartController {
 
     /**
      * 智能分析
-     *
      * @param multipartFile
-     * @param genChartByAiRequest
      * @param request
      * @return
      */
     @PostMapping("/gen")
-    public BaseResponse<BiResponse> genChartByAi(@RequestPart("file") MultipartFile multipartFile,
-                                                 GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
+    public BaseResponse<BiResponse> genChartByAi(
+            @RequestParam("file") MultipartFile multipartFile,
+            HttpServletRequest request) {
 
         log.info("智能分析controller！");
+
+        /// 从RequestContextHolder获取当前请求，这应该是拦截器中设置的包装请求
+        org.springframework.web.context.request.RequestAttributes requestAttributes =
+                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+
+        HttpServletRequest currentRequest = null;
+        if (requestAttributes instanceof org.springframework.web.context.request.ServletRequestAttributes) {
+            currentRequest = ((org.springframework.web.context.request.ServletRequestAttributes) requestAttributes).getRequest();
+        }
+
+        String name = currentRequest.getParameter("name");
+        String goal = currentRequest.getParameter("goal");
+        String chartType = currentRequest.getParameter("chartType");
+
+        if (StringUtils.isAnyBlank(name, goal, chartType)) {
+            throw new BusinessException("参数为空");
+        }
+
+        GenChartByAiRequest genChartByAiRequest = new GenChartByAiRequest();
+        genChartByAiRequest.setName(name);
+        genChartByAiRequest.setGoal(goal);
+        genChartByAiRequest.setChartType(chartType);
+
 
         return chartService.genChartByAi(multipartFile, genChartByAiRequest, request);
     }

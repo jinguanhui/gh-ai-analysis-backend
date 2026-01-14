@@ -50,7 +50,6 @@ public class SseEmitterManager {
      * 创建SSE连接并缓存
      */
     public SseEmitter getEmitter(String taskId) {
-        // 设置超时时间（1分钟，可根据业务调整）
         SseEmitter sseEmitter = emitterMap.get(taskId);
         log.info("获取到SSE连接：taskId = " + taskId);
         return sseEmitter;

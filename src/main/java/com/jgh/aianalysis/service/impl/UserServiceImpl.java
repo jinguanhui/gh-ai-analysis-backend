@@ -153,7 +153,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", user.getId());
-        payload2.put("expireTime", DateUtil.offsetSecond(new Date(), 1));
+        payload2.put("expireTime", DateUtil.offsetHour(new Date(), 1));
         payload2.put("userRole", user.getUserRole());
         payload2.put("refreshToken", refreshToken);
         String token = JWTUtil.createToken(payload2, user.getUserPassword().getBytes());

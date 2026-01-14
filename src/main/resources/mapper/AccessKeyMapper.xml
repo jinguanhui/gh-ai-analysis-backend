@@ -6,7 +6,6 @@
 
     <resultMap id="BaseResultMap" type="com.jgh.ghcommon.model.entity.AccessKey">
             <id property="id" column="id" />
-            <result property="aesKey" column="aesKey" />
             <result property="publicKey" column="publicKey" />
             <result property="privateKey" column="privateKey" />
             <result property="userId" column="userId" />
@@ -18,7 +17,8 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,aesKey,publicKey,privateKey,userId,status,
+        id
+        ,publicKey,privateKey,userId,status,
         lastUsedTime,expireTime,createTime,isDelete
     </sql>
 </mapper>

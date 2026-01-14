@@ -66,13 +66,11 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         String chartType = genChartByAiRequest.getChartType();
 
         // 1. 生成唯一taskId
-        String taskId = UUID.randomUUID().toString();
+        String taskId = UUID.randomUUID().toString().substring(0, 8);
 
         sseEmitterManager.createEmitter(taskId);
         log.info(request.getHeader("userId"));
         Long userId = Long.valueOf(request.getHeader("userId"));
-
-        validInspection(request, userId);
 
         // 启动异步任务进行图表生成
         CompletableFuture.runAsync(() -> {
@@ -89,12 +87,15 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 baseResponse.setCode(200);
                 sseEmitterManager.sendProgress(baseResponse);
                 if (StringUtils.isBlank(goal)) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("请输入分析目标");
                 }
                 if (StringUtils.isBlank(name)) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("请输入分析表的名称");
                 }
                 if (StringUtils.isNotBlank(name) && name.length() > 100) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("名称过长");
                 }
 
@@ -120,6 +121,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 String result = analysisAi.doChat(CsvData, chartType);
                 String[] splits = result.split("【【【【【");
                 if (splits.length < 3) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("AI生成错误！");
                 }
 
@@ -147,6 +149,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                 boolean saveResult = this.save(chart);
                 if (!saveResult) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("数据库插入错误！");
                 }
                 log.info("数据保存成功...");
@@ -165,11 +168,13 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                 User user = userService.getById(userId2);
                 if (user == null) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("用户不存在！");
                 }
                 user.setInvokeCount(user.getInvokeCount() - 1);
                 boolean b = userService.updateById(user);
                 if (!b) {
+                    sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("数据库更新错误！");
                 }
 
@@ -183,49 +188,11 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
             }
         });
 
+        biResponse.setTaskId(taskId);
+
+        baseResponse.setData(biResponse);
+
         return baseResponse;
-    }
-
-    private void validInspection(HttpServletRequest request, Long userId) {
-        User currentUser = userService.getById(userId);
-        if (currentUser.getInvokeCount() < 1) {
-            throw new BusinessException("调用次数已用完！请前往充值");
-        }
-        String url = request.getServletPath();
-        log.info("用户请求的接口是:{},需要进行校验", url);
-
-        // 获取签名
-        String signature = request.getHeader("signature");
-        log.info("前端生成的签名 = {}", signature);
-        if (StringUtils.isEmpty(signature)) {
-            throw new BusinessException("签名不能为空");
-        }
-        //  获取时间戳
-        String timestamp = request.getHeader("stamp");
-        log.info("前端生成的时间戳 = {}", timestamp);
-        if (StringUtils.isEmpty(timestamp)) {
-            throw new BusinessException("无时间信息");
-        }
-
-        //  获取secret
-        String secret = AccessKeyEnum.SIGN.getDescription();
-
-        //  获取请求路径
-        String servletPath = request.getServletPath();
-
-
-        //        合成加密前字符串
-        String jointStr = "&secret=" + secret + "&stamp=" + timestamp + "&url=" + servletPath;
-        log.info("jointStr = {}", jointStr);
-
-        //(hutool工具类)加密
-        Digester digester = new Digester(DigestAlgorithm.MD5);
-        String encryptStr = digester.digestHex(jointStr).toUpperCase();
-        log.info("后端生成的签名 = {}", encryptStr);
-
-        if (!encryptStr.equals(signature)) {
-            throw new BusinessException("签名错误");
-        }
     }
 }
 
