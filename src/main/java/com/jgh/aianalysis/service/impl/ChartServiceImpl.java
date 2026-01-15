@@ -191,6 +191,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         biResponse.setTaskId(taskId);
 
         baseResponse.setData(biResponse);
+        baseResponse.setCode(200);
 
         return baseResponse;
     }

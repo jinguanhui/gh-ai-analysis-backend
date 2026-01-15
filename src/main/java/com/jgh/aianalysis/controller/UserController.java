@@ -169,6 +169,24 @@ public class UserController {
                 .collect(Collectors.toList()));
     }
 
+    //  查询用户本人数据
+    @GetMapping("/getone")
+    public BaseResponse<User> getUser(HttpServletRequest request) {
+        log.info("查询用户");
+        Long currentUserId = Long.valueOf(request.getHeader("userId"));
+        if (currentUserId == null) {
+            log.info("用户查询失败，用户不存在");
+            throw new BusinessException(ResponseCode.USER_UNKNOWN_ERROR);
+        }
+        User user = userService.getById(currentUserId);
+
+        if (user == null) {
+            log.info("用户查询失败，用户不存在");
+            throw new BusinessException(ResponseCode.USER_UNKNOWN_ERROR);
+        }
+        return BaseResponse.success(userService.getSafetyUser(user));
+    }
+
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteUsers(@RequestBody Long id, HttpServletRequest request) {
         log.info("删除用户");
