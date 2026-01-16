@@ -31,6 +31,10 @@ public class RedisUtil {
         redisTemplate.opsForValue().set(key, value, time, TimeUnit.SECONDS);
     }
 
+    public Boolean setnx(String key, String value, long time) {
+        return redisTemplate.opsForValue().setIfAbsent(key, value, time, TimeUnit.SECONDS);
+    }
+
     public void remove(String key, String value) {
         redisTemplate.opsForSet().remove(key, value);
     }
