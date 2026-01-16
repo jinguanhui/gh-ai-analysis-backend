@@ -29,7 +29,7 @@ public class RedisUtil {
         return key == null ? null : redisTemplate.opsForValue().get(key);
     }
     public void set(String key, String value, long time) {
-        redisTemplate.opsForValue().set(key, value, time, TimeUnit.SECONDS);
+        redisTemplate.opsForValue().setIfAbsent(key, value, time, TimeUnit.SECONDS);
     }
     public void set(String key, String value) {
         redisTemplate.opsForValue().set(key, value);

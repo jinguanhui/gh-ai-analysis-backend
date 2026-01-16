@@ -8,6 +8,7 @@ import com.aliyun.dypnsapi20170525.models.CheckSmsVerifyCodeResponse;
 import com.aliyun.dypnsapi20170525.models.SendSmsVerifyCodeRequest;
 import com.aliyun.dypnsapi20170525.models.SendSmsVerifyCodeResponse;
 import com.aliyun.teautil.models.RuntimeOptions;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.mapper.UserLoginMapper;
 import com.jgh.aianalysis.service.SmsService;
@@ -97,6 +98,20 @@ public class SmsServiceImpl implements SmsService {
             throw new BusinessException("验证码验证失败");
         }
 
+        QueryWrapper<ThirdPartyUser> wrapper = new QueryWrapper<>();
+        wrapper.eq("provider_id", phone);
+
+        ThirdPartyUser thirdPartyUserServiceOne = thirdPartyUserService.getOne(wrapper);
+
+        if (thirdPartyUserServiceOne != null) {
+            //  如果第三方用户已存在，则直接返回用户信息
+            User user = userService.getById(thirdPartyUserServiceOne.getUserId());
+            refreshTokenSet(request, response, user);
+
+            return userService.getSafetyUser(user);
+        }
+
+        //  第三方用户不存在
         //  注册第三方登录账号
         //  注册本系统用户
         User user = new User();
@@ -130,6 +145,15 @@ public class SmsServiceImpl implements SmsService {
             throw new BusinessException("手机登录失败");
         }
 
+        refreshTokenSet(request, response, newUser);
+
+        //  登录并颁发 token
+
+        return userService.getSafetyUser(user);
+
+    }
+
+    private void refreshTokenSet(HttpServletRequest request, HttpServletResponse response, User newUser) {
         //  颁发token
         //  生成jwt令牌设置到返回的用户数据中
 
@@ -174,10 +198,5 @@ public class SmsServiceImpl implements SmsService {
             log.info("用户登录失败，登录信息数据库插入失败！");
             throw new BusinessException("用户登录信息数据库插入失败！");
         }
-
-        //  登录并颁发 token
-
-        return userService.getSafetyUser(user);
-
     }
 }
