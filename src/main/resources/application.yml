@@ -59,6 +59,10 @@ mybatis-plus:
       logic-delete-value: 1 # 逻辑已删除值(默认为 1)
       logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)
 
+aliyun:
+  dypnsapi:
+    access-key-id: LTAI5tDrz8uACCj1WEndWA9F
+    access-key-secret: 3zkKT5wsf4VopttTrEEGXyQrvEiyuW
 
 springdoc:
   swagger-ui:

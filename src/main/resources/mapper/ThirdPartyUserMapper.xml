@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jgh.aianalysis.mapper.ThirdPartyUserMapper">
+
+    <resultMap id="BaseResultMap" type="com.jgh.ghcommon.model.entity.ThirdPartyUser">
+            <id property="id" column="id" />
+            <result property="provider_type" column="provider_type" />
+            <result property="provider_id" column="provider_id" />
+            <result property="provider_account" column="provider_account" />
+            <result property="raw_data" column="raw_data" />
+            <result property="userId" column="userId" />
+            <result property="createTime" column="createTime" />
+            <result property="updateTime" column="updateTime" />
+            <result property="isDelete" column="isDelete" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,provider_type,provider_id,provider_account,raw_data,userId,
+        createTime,updateTime,isDelete
+    </sql>
+</mapper>

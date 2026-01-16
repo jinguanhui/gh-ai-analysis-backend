@@ -89,6 +89,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
         user.setSalt(salt);
+        String randomNumbers = RandomUtil.randomNumbers(4);
+        String username = "用户GH" + randomNumbers;
+        user.setUsername(username);
         boolean saveResult = this.save(user);
         if (!saveResult) {
             throw new BusinessException("用户数据数据库插入失败！");
