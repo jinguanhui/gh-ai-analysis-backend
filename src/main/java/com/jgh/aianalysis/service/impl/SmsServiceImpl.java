@@ -70,7 +70,7 @@ public class SmsServiceImpl implements SmsService {
 
 // 发送成功后设置 Redis 锁，限制频率
         try {
-            redisUtil.set("lockKey", "1", 60);
+            redisUtil.set("lockKey", phone, 60);
         } catch (Exception e) {
             throw new BusinessException("发送验证码失败,redis存储失败");
         }
@@ -98,14 +98,37 @@ public class SmsServiceImpl implements SmsService {
             throw new BusinessException("验证码验证失败");
         }
 
+        return getUserThirdLogin(ThirdPartyTypeEnum.PHONE, phone, request, response);
+
+    }
+
+    @Override
+    public User verify(String email, String code, HttpServletRequest request, HttpServletResponse response) {
+        //  从redis中获取验证码验证
+        String emailCode = null;
+        try {
+            emailCode = redisUtil.get(email);
+        } catch (Exception e) {
+            throw new BusinessException("邮箱登录失败！！！");
+        }
+
+        //  注册第三方用户并登陆
+        return getUserThirdLogin(ThirdPartyTypeEnum.EMAIL, email, request, response);
+    }
+
+    private User getUserThirdLogin(ThirdPartyTypeEnum  type, String connection, HttpServletRequest request, HttpServletResponse response) {
         QueryWrapper<ThirdPartyUser> wrapper = new QueryWrapper<>();
-        wrapper.eq("provider_id", phone);
+        wrapper.eq("provider_id", connection);
 
         ThirdPartyUser thirdPartyUserServiceOne = thirdPartyUserService.getOne(wrapper);
 
         if (thirdPartyUserServiceOne != null) {
             //  如果第三方用户已存在，则直接返回用户信息
             User user = userService.getById(thirdPartyUserServiceOne.getUserId());
+            if (user.getUserStatus() == 1) {
+                log.info("用户登录失败，用户被封禁");
+                throw new BusinessException("用户被封禁");
+            }
             refreshTokenSet(request, response, user);
 
             return userService.getSafetyUser(user);
@@ -118,16 +141,21 @@ public class SmsServiceImpl implements SmsService {
         String randomNumbers = RandomUtil.randomNumbers(4);
         String username = "用户GH" + randomNumbers;
         user.setUsername(username);
-        user.setUserAccount(phone);
+        user.setUserAccount(connection);
         String salt = RandomUtil.randomNumbers(5);
         String encryptPassword = DigestUtils.md5DigestAsHex((salt + RandomUtil.randomNumbers(8)).getBytes());
         user.setUserPassword(encryptPassword);
-        user.setPhone(phone);
+        if (type.getType() == "phone") {
+
+            user.setPhone(connection);
+        }else if (type.getType() == "email"){
+            user.setEmail(connection);
+        }
         user.setSalt(salt);
         user.setInvokeCount(10);
         boolean save = userService.save(user);
         if (!save) {
-            throw new BusinessException("手机登录失败");
+            throw new BusinessException(type.getType() + "登录失败");
         }
 
         User newUser = userService.getById(user.getId());
@@ -135,22 +163,20 @@ public class SmsServiceImpl implements SmsService {
         //  注册第三方登录账号
 
         ThirdPartyUser thirdPartyUser = new ThirdPartyUser();
-        thirdPartyUser.setProvider_type(ThirdPartyTypeEnum.PHONE.getType());
-        thirdPartyUser.setProvider_id(phone);
-        thirdPartyUser.setProvider_account(phone);
+        thirdPartyUser.setProvider_type(type.getType());
+        thirdPartyUser.setProvider_id(connection);
+        thirdPartyUser.setProvider_account(connection);
         thirdPartyUser.setUserId(newUser.getId());
 
         boolean save1 = thirdPartyUserService.save(thirdPartyUser);
         if (!save1) {
-            throw new BusinessException("手机登录失败");
+            throw new BusinessException(type.getType() + "登录失败");
         }
 
         refreshTokenSet(request, response, newUser);
 
-        //  登录并颁发 token
 
         return userService.getSafetyUser(user);
-
     }
 
     private void refreshTokenSet(HttpServletRequest request, HttpServletResponse response, User newUser) {
@@ -167,7 +193,7 @@ public class SmsServiceImpl implements SmsService {
         //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
         String uerId = newUser.getId().toString();
         //  用userId作为key，refreshToken作为value
-        redisUtil.set(uerId, refreshToken, 7 * 24 * 60 * 60);
+        redisUtil.set(uerId + ":refreshToken", refreshToken, 7 * 24 * 60 * 60);
 
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", newUser.getId());

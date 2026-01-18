@@ -132,6 +132,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             log.info("用户登录失败，账号错误");
             throw new BusinessException("用户登录失败，账号错误");
         }
+
+        if (user.getUserStatus() == 1) {
+            log.info("用户登录失败，用户被封禁");
+            throw new BusinessException("用户被封禁");
+        }
         String salt = user.getSalt();
         // 2.加密
         String encryptPassword = DigestUtils.md5DigestAsHex((salt + userPassword).getBytes());
@@ -152,7 +157,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
         String uerId = user.getId().toString();
         //  用userId作为key，refreshToken作为value
-        redisUtil.set(uerId, refreshToken, 7 * 24 * 60 * 60);
+        redisUtil.set(uerId + ":refreshToken", refreshToken, 7 * 24 * 60 * 60);
 
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", user.getId());
@@ -202,6 +207,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setPhone(user.getPhone());
         safetyUser.setCreateTime(user.getCreateTime());
         safetyUser.setToken(user.getToken());
+        safetyUser.setInvokeCount(user.getInvokeCount());
         return safetyUser;
     }
 

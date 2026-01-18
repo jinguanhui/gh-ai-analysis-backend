@@ -11,4 +11,5 @@ public interface SmsService {
     User verifyCode(String phone, String code, HttpServletRequest request, HttpServletResponse response);
 
 
+    User verify(String email, String code, HttpServletRequest request, HttpServletResponse response);
 }

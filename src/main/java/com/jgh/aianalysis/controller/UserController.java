@@ -1,16 +1,17 @@
 package com.jgh.aianalysis.controller;
 
 import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.RandomUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.jwt.JWTUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.UserService;
+import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ResponseCode;
 import com.jgh.ghcommon.constant.UserConstant;
 import com.jgh.ghcommon.model.dto.user.UserLoginRequest;
+import com.jgh.ghcommon.model.dto.user.UserQueryDto;
 import com.jgh.ghcommon.model.dto.user.UserRegisterRequest;
 import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
@@ -18,14 +19,12 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.util.DigestUtils;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -41,6 +40,9 @@ import java.util.stream.Collectors;
 public class UserController {
     @Resource
     private UserService userService;
+
+    @Resource
+    private RedisUtil redisUtil;
 
     /**
      * 用户注册
@@ -98,8 +100,10 @@ public class UserController {
      * @return void
      */
     @PostMapping("/logout")
-    public BaseResponse userLogout(HttpServletResponse response) {
+    public BaseResponse userLogout(HttpServletRequest request, HttpServletResponse response) {
         log.info("用户登出！");
+
+        String userId = request.getHeader("userId");
 
         // 创建Cookie对象，名称与原refreshToken一致
         Cookie cookie = new Cookie("refreshToken", "");
@@ -111,6 +115,9 @@ public class UserController {
         cookie.setMaxAge(0); // 设置Max-Age为0（立即过期）
         // 添加到响应头
         response.addCookie(cookie);
+
+        redisUtil.remove(userId + ":refreshToken");
+
 
         return BaseResponse.success("登出成功");
 
@@ -153,19 +160,15 @@ public class UserController {
         return BaseResponse.success(token);
     }
 
-    @GetMapping("/search")
-    public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
+    @PostMapping("/search")
+    public BaseResponse<List<User>> searchUsers(@RequestBody UserQueryDto user, HttpServletRequest request) {
         log.info("列表展示用户");
         if (!isAdmin(request)) {
             log.info("用户权限不足");
             throw new BusinessException(ResponseCode.NOT_AUTH);
         }
-        QueryWrapper<User> wrapper = new QueryWrapper<>();
-        if (StringUtils.isNotBlank(username)) {
-            wrapper.like("username", username);
-        }
-        return BaseResponse.success(userService.list(wrapper).stream().map(
-                        user -> userService.getSafetyUser(user))
+        return BaseResponse.success(userService.list(getUserQueryWrapper(user)).stream().map(
+                        userItem -> userService.getSafetyUser(userItem))
                 .collect(Collectors.toList()));
     }
 
@@ -206,11 +209,6 @@ public class UserController {
         return BaseResponse.success(userService.removeById(id));
     }
 
-    private boolean isAdmin(HttpServletRequest request) {
-        String userRole = request.getHeader("userRole");
-        return userRole != null && Objects.equals(userRole, String.valueOf(UserConstant.ADMIN_ROLE));
-    }
-
     /**
      * 更新用户
      * @param user
@@ -220,7 +218,20 @@ public class UserController {
     @PostMapping("/update")
     public BaseResponse<Boolean> updateUsers(@RequestBody User user, HttpServletRequest request) {
         log.info("更新用户:{}", user);
-        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        UpdateWrapper<User> wrapper = getUserUpdateWrapper(user);
+
+        return BaseResponse.success(userService.update(wrapper));
+    }
+
+    private boolean isAdmin(HttpServletRequest request) {
+        String userRole = request.getHeader("userRole");
+        return userRole != null && Objects.equals(userRole, String.valueOf(UserConstant.ADMIN_ROLE));
+    }
+
+    //  更新用户wrapper
+    @NotNull
+    private static UpdateWrapper<User> getUserUpdateWrapper(User user) {
+        UpdateWrapper<User> updateWrapper = new UpdateWrapper<>();
         Long id = user.getId();
         String username = user.getUsername();
         String userAccount = user.getUserAccount();
@@ -231,19 +242,54 @@ public class UserController {
         String phone = user.getPhone();
         Date createTime = user.getCreateTime();
         Integer userRole = user.getUserRole();
+        Integer invokeCount = user.getInvokeCount();
 
-        wrapper.eq("id", id);
-        wrapper.eq("username", username);
-        wrapper.eq("userAccount", userAccount);
-        wrapper.eq("avatarUrl", avatarUrl);
-        wrapper.eq("gender", gender);
-        wrapper.eq("email", email);
-        wrapper.eq("userStatus", userStatus);
-        wrapper.eq("phone", phone);
-        wrapper.eq("userRole", userRole);
-        wrapper.eq("createTime", createTime);
+        updateWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
+        updateWrapper.set(StringUtils.isNotEmpty(username), "username", username);
+        updateWrapper.set(StringUtils.isNotEmpty(userAccount), "userAccount", userAccount);
+        updateWrapper.set(StringUtils.isNotEmpty(avatarUrl), "avatarUrl", avatarUrl);
+        updateWrapper.set(ObjectUtils.isNotEmpty(gender), "gender", gender);
+        updateWrapper.set(StringUtils.isNotEmpty(email), "email", email);
+        updateWrapper.set(ObjectUtils.isNotEmpty(userStatus), "userStatus", userStatus);
+        updateWrapper.set(StringUtils.isNotEmpty(phone), "phone", phone);
+        updateWrapper.set(ObjectUtils.isNotEmpty(userRole), "userRole", userRole);
+        updateWrapper.set(ObjectUtils.isNotEmpty(createTime), "createTime", createTime);
+        updateWrapper.set(ObjectUtils.isNotEmpty(invokeCount), "invokeCount", invokeCount);
 
-        return BaseResponse.success(userService.update(wrapper));
+        return updateWrapper;
+    }
+
+    //  查询用户wrapper
+    @NotNull
+    private static QueryWrapper<User> getUserQueryWrapper(UserQueryDto user) {
+
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        Long id = user.getId();
+        String username = user.getUsername();
+        String userAccount = user.getUserAccount();
+        Integer gender = user.getGender();
+        String email = user.getEmail();
+        Integer userStatus = user.getUserStatus();
+        String phone = user.getPhone();
+        Integer userRole = user.getUserRole();
+        Date beginTime = user.getBeginTime();
+        Date endTime = user.getEndTime();
+
+
+        wrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
+        wrapper.like(StringUtils.isNotEmpty(username), "username", username);
+        wrapper.like(StringUtils.isNotEmpty(userAccount), "userAccount", userAccount);
+        wrapper.eq(ObjectUtils.isNotEmpty(gender), "gender", gender);
+        wrapper.like(StringUtils.isNotEmpty(email), "email", email);
+        wrapper.eq(ObjectUtils.isNotEmpty(userStatus), "userStatus", userStatus);
+        wrapper.like(StringUtils.isNotEmpty(phone), "phone", phone);
+        wrapper.eq(ObjectUtils.isNotEmpty(userRole), "userRole", userRole);
+        // 根据时间范围查询--beginTime, endTime
+        wrapper.between(ObjectUtils.isNotEmpty(beginTime) && ObjectUtils.isNotEmpty(endTime), "createTime", beginTime, endTime);
+
+
+        return wrapper;
+
     }
 
 

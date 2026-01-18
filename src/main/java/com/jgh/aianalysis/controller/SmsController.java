@@ -2,20 +2,21 @@ package com.jgh.aianalysis.controller;
 
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.SmsService;
+import com.jgh.aianalysis.utils.MailMsgUtil;
 import com.jgh.ghcommon.common.BaseResponse;
+import com.jgh.ghcommon.model.dto.sms.MailCodeSendDTO;
+import com.jgh.ghcommon.model.dto.sms.MailCodeVerifyDTO;
 import com.jgh.ghcommon.model.dto.sms.SmsCodeSendDTO;
 import com.jgh.ghcommon.model.dto.sms.SmsCodeVerifyDTO;
 import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
+import jakarta.mail.MessagingException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/sms")
@@ -24,6 +25,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class SmsController {
 
     private final SmsService smsService;
+    private final MailMsgUtil mailMsgUtil;
+
+    @PostMapping("/mail/send")
+    public BaseResponse<Boolean> send(@RequestBody MailCodeSendDTO dto) {
+        log.info("正在进行邮件发送");
+        try {
+            return BaseResponse.success(mailMsgUtil.mail(dto.getEmail()));
+        } catch (MessagingException e) {
+            throw new BusinessException("邮件发送失败！！！");
+        }
+    }
+
+    @PostMapping("/mail/verify")
+    public BaseResponse<User> verify(@RequestBody MailCodeVerifyDTO dto, HttpServletRequest request, HttpServletResponse response) {
+        log.info("正在进行邮件验证");
+        return BaseResponse.success(smsService.verify(dto.getEmail(), dto.getCode(), request, response));
+    }
+
+
 
     @PostMapping("/send")
     public BaseResponse<Boolean> sendCode(@RequestBody @Valid SmsCodeSendDTO dto) {

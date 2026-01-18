@@ -45,7 +45,7 @@ public class RedisUtil {
      * @param key 键
      */
     public void remove(String key) {
-        Set<String> keys = redisTemplate.keys("前缀字符" + "*");
+        Set<String> keys = redisTemplate.keys(key);
         redisTemplate.delete(keys);
     }
 }
