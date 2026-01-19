@@ -2,8 +2,10 @@ package com.jgh.aianalysis.handler;
 
 import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.utils.EncryptionUtils;
+import com.jgh.aianalysis.utils.TextGreenUtils;
 import com.jgh.ghcommon.model.entity.AccessKey;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,13 +27,15 @@ import java.util.*;
 public class CustomMultipartHttpServletRequest extends HttpServletRequestWrapper implements MultipartHttpServletRequest {
 
     private final AccessKeyService accessKeyService;
+    private final TextGreenUtils textGreenUtils;
     private Map<String, MultipartFile> modifiedFileMap;
     private Map<String, String[]> modifiedParameterMap;
 
-    public CustomMultipartHttpServletRequest(HttpServletRequest request, AccessKeyService accessKeyService) {
+    public CustomMultipartHttpServletRequest(HttpServletRequest request, AccessKeyService accessKeyService, TextGreenUtils textGreenUtils) {
         super(request);
         this.accessKeyService = accessKeyService;
         this.modifiedParameterMap = new HashMap<>();
+        this.textGreenUtils = textGreenUtils;
 
         // 复制原有的参数
         for (Map.Entry<String, String[]> entry : super.getParameterMap().entrySet()) {
@@ -84,6 +88,13 @@ public class CustomMultipartHttpServletRequest extends HttpServletRequestWrapper
                     // 解析解密后的JSON数据
                     Map<String, Object> decryptedParams = JSON.parseObject(decryptedData, Map.class);
 
+                    //  进行文本内容审查
+                    Map map = textGreenUtils.greenTextScanPlusVersion(decryptedData);
+                    if (!"pass".equals(map.get("suggestion"))) {
+                        log.error("文本内容违规");
+                        throw new RuntimeException("文本内容违规");
+                    }
+
                     // 将解密后的参数合并到参数映射中，但跳过文件参数
                     for (Map.Entry<String, Object> entry : decryptedParams.entrySet()) {
                         String key = entry.getKey();
@@ -119,7 +130,8 @@ public class CustomMultipartHttpServletRequest extends HttpServletRequestWrapper
 
         } catch (Exception e) {
             log.error("解密过程出错", e);
-            throw new RuntimeException("解密失败: " + e.getMessage(), e);
+            e.printStackTrace();
+            throw new BusinessException("任务提交失败！！！" );
         }
     }
 

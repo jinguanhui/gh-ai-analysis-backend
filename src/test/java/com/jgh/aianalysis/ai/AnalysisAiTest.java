@@ -8,11 +8,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 class AnalysisAiTest {
 
     @Resource
-    private AnalysisAi analysisAi;
+    private com.jgh.aianalysis.manager.ai.AIManager AIManager;
 
     @Test
     void doChat() {
-        String answer = analysisAi.doChat("分析需求：\n" +
+        String answer = AIManager.doChat("帮我分析","分析需求：\n" +
                 "分析网站用户的增长情况\n" +
                 "原始数据：\n" +
                 "日期,用户数\n" +

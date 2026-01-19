@@ -2,10 +2,8 @@ package com.jgh.aianalysis.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.jgh.aianalysis.ai.AnalysisAi;
 import com.jgh.aianalysis.annotation.AuthCheck;
 import com.jgh.aianalysis.exception.BusinessException;
-import com.jgh.aianalysis.handler.CustomMultipartHttpServletRequest;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
@@ -16,7 +14,6 @@ import com.jgh.ghcommon.constant.CommonConstant;
 import com.jgh.ghcommon.constant.UserConstant;
 import com.jgh.ghcommon.model.dto.chart.*;
 import com.jgh.ghcommon.model.entity.Chart;
-import com.jgh.ghcommon.model.entity.User;
 import com.jgh.ghcommon.model.vo.BiResponse;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,8 +27,6 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import static com.jgh.ghcommon.constant.UserConstant.USER_LOGIN_STATUS;
 
 
 /**

@@ -1,7 +1,11 @@
 package com.jgh.aianalysis.handler;
 
+import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.AccessKeyService;
+import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.IPUtils;
+import com.jgh.aianalysis.utils.TextGreenUtils;
+import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
@@ -22,6 +26,12 @@ public class MyInterceptor implements HandlerInterceptor {
 
     @Resource
     private AccessKeyService accessKeyService;
+
+    @Resource
+    private TextGreenUtils textGreenUtils;
+
+    @Resource
+    private UserService userService;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -47,16 +57,26 @@ public class MyInterceptor implements HandlerInterceptor {
         }
 
         if (request.getServletPath().equals("/chart/gen")) {
+            Long userId = Long.valueOf(request.getHeader("userId"));
+
+            User user = userService.getById(userId);
+            Integer invokeCount = user.getInvokeCount();
+            if (invokeCount <= 0) {
+                log.error("用户:{}，调用次数已用完！请前往充值", userId);
+                throw new BusinessException("调用次数已用完！请前往充值");
+            }
             // 检查是否为multipart请求
             if (request.getContentType() != null && request.getContentType().toLowerCase().startsWith("multipart/")) {
                 // 对于multipart请求，我们需要自定义包装器来处理解密
                 CustomMultipartHttpServletRequest customMultipartHttpServletRequest
-                        = new CustomMultipartHttpServletRequest(request, accessKeyService);
+                        = new CustomMultipartHttpServletRequest(request, accessKeyService, textGreenUtils);
                 // 通过RequestContextHolder设置包装后的请求
                 org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
                         new org.springframework.web.context.request.ServletRequestAttributes(customMultipartHttpServletRequest, response), true);
             }
         }
+
+
 
         return true;
     }

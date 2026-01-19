@@ -1,16 +1,14 @@
 package com.jgh.aianalysis.service.impl;
 
-import cn.hutool.crypto.digest.DigestAlgorithm;
-import cn.hutool.crypto.digest.Digester;
+import cn.hutool.core.io.FileUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.jgh.aianalysis.ai.AnalysisAi;
+import com.jgh.aianalysis.manager.ai.AIManager;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.mapper.ChartMapper;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
-import com.jgh.ghcommon.common.AccessKeyEnum;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.model.dto.chart.GenChartByAiRequest;
 import com.jgh.ghcommon.model.entity.Chart;
@@ -23,10 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -42,10 +37,16 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     private UserService userService;
 
     @Resource
-    private AnalysisAi analysisAi;
+    private AIManager aIManager;
 
     @Resource
     private SseEmitterManager sseEmitterManager;
+
+    //  文件大小最多为1MB
+    private final long MAX_FILE_SIZE = 1024 * 1024;
+
+    //  合格的文件后缀
+    private static final List<String> SUFFIX_ARRAY = List.of("xlsx");
 
 
     /**
@@ -58,12 +59,31 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
      */
     @Override
     public BaseResponse<BiResponse> genChartByAi(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
-        // 创建SseEmitter，设置较长的超时时间
-        BiResponse biResponse = new BiResponse();
-        BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
         String name = genChartByAiRequest.getName();
         String goal = genChartByAiRequest.getGoal();
         String chartType = genChartByAiRequest.getChartType();
+
+        //  校验文件大小、后缀、内容合规性（阿里云OSS对象存储的审核功能）
+        String originalFilename = multipartFile.getOriginalFilename();
+        long size = multipartFile.getSize();
+
+        if (size > MAX_FILE_SIZE) {
+            throw new BusinessException("文件超过1MB！");
+        }
+
+        String suffix = FileUtil.getSuffix(originalFilename);
+
+        if (!SUFFIX_ARRAY.contains(suffix)) {
+            throw new BusinessException("文件格式错误！");
+        }
+
+
+
+
+        // 创建SseEmitter，设置较长的超时时间
+        BiResponse biResponse = new BiResponse();
+        BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
+
 
         // 1. 生成唯一taskId
         String taskId = UUID.randomUUID().toString().substring(0, 8);
@@ -118,7 +138,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                 sseEmitterManager.sendProgress(baseResponse);
 
-                String result = analysisAi.doChat(CsvData, chartType);
+                String result = aIManager.doChat(goal,CsvData, chartType);
                 String[] splits = result.split("【【【【【");
                 if (splits.length < 3) {
                     sseEmitterManager.removeEmitter(taskId);
