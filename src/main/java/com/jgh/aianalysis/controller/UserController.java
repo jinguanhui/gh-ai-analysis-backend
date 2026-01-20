@@ -1,13 +1,15 @@
 package com.jgh.aianalysis.controller;
 
 import cn.hutool.core.date.DateUtil;
+import cn.hutool.json.JSONUtil;
 import cn.hutool.jwt.JWTUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.UserService;
-import com.jgh.aianalysis.utils.AliyunOSSUtil;
+import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
 import com.jgh.aianalysis.utils.RedisUtil;
+import com.jgh.aianalysis.utils.aliyun.FileGreenUtils;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ResponseCode;
 import com.jgh.ghcommon.constant.UserConstant;
@@ -49,6 +51,9 @@ public class UserController {
 
     @Resource
     private AliyunOSSUtil aliyunOSSUtil;
+
+    @Resource
+    private FileGreenUtils fileGreenUtils;
 
     /**
      * 用户注册
@@ -122,7 +127,13 @@ public class UserController {
         // 添加到响应头
         response.addCookie(cookie);
 
-        redisUtil.remove(userId + ":refreshToken");
+        try {
+            redisUtil.remove(userId + ":refreshToken");
+        } catch (Exception e) {
+            log.error("redis删除失败！");
+            e.printStackTrace();
+            throw new BusinessException("redis删除失败！");
+        }
 
 
         return BaseResponse.success("登出成功");
@@ -217,15 +228,16 @@ public class UserController {
 
     /**
      * 更新用户
-     * @param user
+     * @param userJson
      * @param request
      * @return
      */
     @PostMapping("/update")
     public BaseResponse<Boolean> updateUsers(@RequestParam("file") MultipartFile multipartFile,
-                                             User user,
+                                             @RequestParam("user") String userJson,
                                              HttpServletRequest request) {
-        log.info("更新用户:{}", user);
+
+        User user = JSONUtil.toBean(userJson, User.class);
         UpdateWrapper<User> wrapper = getUserUpdateWrapper(user);
 
         if (!multipartFile.isEmpty()) {
@@ -245,6 +257,18 @@ public class UserController {
             }
 
             // 将返回的URL进行内容检查
+            Map map = null;
+            try {
+                map = fileGreenUtils.fileGreenCheck(fileURL);
+            } catch (Exception e) {
+                log.error("图片检测失败！！！");
+                throw new BusinessException("图片检测失败！！！");
+            }
+
+            if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
+                log.error("图片检测失败！！！");
+                throw new BusinessException("图片检测失败！！！");
+            }
 
             //  检查通过，将URL保存至数据库
             wrapper.set("avatarUrl", fileURL);
@@ -265,7 +289,6 @@ public class UserController {
         Long id = user.getId();
         String username = user.getUsername();
         String userAccount = user.getUserAccount();
-        String avatarUrl = user.getAvatarUrl();
         Integer gender = user.getGender();
         String email = user.getEmail();
         Integer userStatus = user.getUserStatus();
@@ -277,7 +300,6 @@ public class UserController {
         updateWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
         updateWrapper.set(StringUtils.isNotEmpty(username), "username", username);
         updateWrapper.set(StringUtils.isNotEmpty(userAccount), "userAccount", userAccount);
-        updateWrapper.set(StringUtils.isNotEmpty(avatarUrl), "avatarUrl", avatarUrl);
         updateWrapper.set(ObjectUtils.isNotEmpty(gender), "gender", gender);
         updateWrapper.set(StringUtils.isNotEmpty(email), "email", email);
         updateWrapper.set(ObjectUtils.isNotEmpty(userStatus), "userStatus", userStatus);

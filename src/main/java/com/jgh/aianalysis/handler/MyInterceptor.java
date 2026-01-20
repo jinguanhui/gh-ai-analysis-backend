@@ -4,18 +4,15 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.IPUtils;
-import com.jgh.aianalysis.utils.TextGreenUtils;
+import com.jgh.aianalysis.utils.aliyun.TextGreenUtils;
 import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
-import org.springframework.web.servlet.HandlerExecutionChain;
-import org.springframework.web.servlet.ModelAndView;
 
 import java.util.Arrays;
 

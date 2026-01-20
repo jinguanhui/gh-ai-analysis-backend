@@ -1,4 +1,4 @@
-package com.jgh.aianalysis.utils;
+package com.jgh.aianalysis.utils.aliyun;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
@@ -11,7 +11,6 @@ import com.aliyun.teautil.models.RuntimeOptions;
 import com.jgh.aianalysis.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.HashMap;

@@ -38,10 +38,15 @@ public class LogInterceptor {
         // 生成请求唯一 id
         String requestId = UUID.randomUUID().toString();
         String url = httpServletRequest.getRequestURI();
+
         // 获取请求参数
         Object[] args = point.getArgs();
-        String reqParam = "[" + StringUtils.join(args, ", ") + "]";
+        String reqParam = null;
         // 输出请求日志
+        if (!"/api/user/update".equals( url)) {
+
+            reqParam = "[" + StringUtils.join(args, ", ") + "]";
+        }
         log.info("请求开始，id: {}, path: {}, ip: {}, params: {}", requestId, url,
                 httpServletRequest.getRemoteHost(), reqParam);
         // 执行原方法

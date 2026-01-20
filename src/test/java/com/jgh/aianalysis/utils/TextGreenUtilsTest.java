@@ -1,12 +1,11 @@
 package com.jgh.aianalysis.utils;
 
+import com.jgh.aianalysis.utils.aliyun.TextGreenUtils;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 class TextGreenUtilsTest {

@@ -151,21 +151,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         payload.put("id", user.getId());
         payload.put("expireTime", DateUtil.offsetDay(new Date(), 7));
         payload.put("userRole", user.getUserRole());
+        payload.put("nonce", RandomUtil.randomNumbers(5));
 
         String refreshToken = JWTUtil.createToken(payload, user.getUserPassword().getBytes());
+        log.info("refreshToken: " + refreshToken);
 
         //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
         String uerId = user.getId().toString();
         //  用userId作为key，refreshToken作为value
         redisUtil.set(uerId + ":refreshToken", refreshToken, 7 * 24 * 60 * 60);
 
+        String s = redisUtil.get(uerId + ":refreshToken");
+        log.info("redis: " + s);
+
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", user.getId());
         payload2.put("expireTime", DateUtil.offsetHour(new Date(), 1));
         payload2.put("userRole", user.getUserRole());
-        payload2.put("refreshToken", refreshToken);
         String token = JWTUtil.createToken(payload2, user.getUserPassword().getBytes());
         user.setToken(token);
+        log.info("token: " + token);
 
         // 3. 将refreshToken设置到httponly cookie
         Cookie refreshTokenCookie = new Cookie("refreshToken", refreshToken);

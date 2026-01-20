@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.utils.EncryptionUtils;
-import com.jgh.aianalysis.utils.TextGreenUtils;
+import com.jgh.aianalysis.utils.aliyun.TextGreenUtils;
 import com.jgh.ghcommon.model.entity.AccessKey;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

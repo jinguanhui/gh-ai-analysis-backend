@@ -7,8 +7,8 @@ import java.net.InetAddress;
 /**
  * 网络工具类
  *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
- * @from <a href="https://yupi.icu">编程导航知识星球</a>
+ * @author <fileGreenCheck href="https://github.com/liyupi">程序员鱼皮</fileGreenCheck>
+ * @from <fileGreenCheck href="https://yupi.icu">编程导航知识星球</fileGreenCheck>
  */
 public class NetUtils {
 
