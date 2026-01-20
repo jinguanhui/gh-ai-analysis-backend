@@ -63,7 +63,8 @@ public class FileGreenUtils {
 
         //  https://ai-analysis-jgh.oss-cn-shenzhen.aliyuncs.com/68695d5b-416e-4447-b52f-bc15887e54ff.jpg
         //  将上面的URL地址转化为类似这种的文件名image/001.jpg
-        String file = url.substring(url.lastIndexOf("/"));
+        String file ="image"+ url.substring(url.lastIndexOf("/"));
+        log.info("阿里云OSS文件路径为：{}",  file);
         //待检测数据唯一标识
         serviceParameters.put("dataId", UUID.randomUUID().toString());
         // 待检测文件所在bucket的区域。 示例：cn-shanghai
@@ -116,6 +117,10 @@ public class FileGreenUtils {
                         for (ImageModerationResponseBodyDataResult result : results) {
                             log.info("label=" + result.getLabel());
                             log.info("confidence=" + result.getConfidence());
+                            if (!"nonLabel".equals(result.getLabel()) && result.getConfidence() != null) {
+                                resultMap.put("suggestion","review");
+                                return resultMap;
+                            }
                         }
                         resultMap.put("suggestion","pass");
                         return resultMap;

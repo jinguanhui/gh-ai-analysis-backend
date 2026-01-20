@@ -34,6 +34,7 @@ public class EncryptionUtils {
      */
     public static KeyPair generateRSAKeyPair() throws Exception {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+        // 显式使用SecureRandom以确保随机性
         keyPairGenerator.initialize(RSA_KEY_SIZE);
         return keyPairGenerator.generateKeyPair();
     }

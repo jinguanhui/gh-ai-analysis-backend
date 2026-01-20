@@ -266,8 +266,8 @@ public class UserController {
             }
 
             if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
-                log.error("图片检测失败！！！");
-                throw new BusinessException("图片检测失败！！！");
+                log.error("图片检测失败！！！内容不合规");
+                throw new BusinessException("图片检测失败！！！内容不合规");
             }
 
             //  检查通过，将URL保存至数据库

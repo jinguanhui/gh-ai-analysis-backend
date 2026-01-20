@@ -45,7 +45,7 @@ public class AliyunOSSUtil {
         String originalFilename = multipartFile.getOriginalFilename();
         //  获取当前时间戳--如2025-06-11-01-59-59
         String formattedTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"));
-        String fileName = formattedTime + originalFilename.substring(originalFilename.lastIndexOf("."));
+        String fileName = "image/" + formattedTime + originalFilename.substring(originalFilename.lastIndexOf("."));
 
         // 创建OSSClient实例。
         // 当OSSClient实例不再使用时，调用shutdown方法以释放资源。
