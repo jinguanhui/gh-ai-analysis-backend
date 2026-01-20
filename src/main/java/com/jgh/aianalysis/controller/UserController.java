@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.UserService;
+import com.jgh.aianalysis.utils.AliyunOSSUtil;
 import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ResponseCode;
@@ -23,7 +24,9 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -43,6 +46,9 @@ public class UserController {
 
     @Resource
     private RedisUtil redisUtil;
+
+    @Resource
+    private AliyunOSSUtil aliyunOSSUtil;
 
     /**
      * 用户注册
@@ -216,9 +222,33 @@ public class UserController {
      * @return
      */
     @PostMapping("/update")
-    public BaseResponse<Boolean> updateUsers(@RequestBody User user, HttpServletRequest request) {
+    public BaseResponse<Boolean> updateUsers(@RequestParam("file") MultipartFile multipartFile,
+                                             User user,
+                                             HttpServletRequest request) {
         log.info("更新用户:{}", user);
         UpdateWrapper<User> wrapper = getUserUpdateWrapper(user);
+
+        if (!multipartFile.isEmpty()) {
+            //  将图片上传至OSS
+            String fileURL = null;
+            try {
+                 fileURL = aliyunOSSUtil.getFileURL(multipartFile);
+            } catch (IOException e) {
+                log.error("图片上传失败！！！");
+                e.printStackTrace();
+                throw new BusinessException("图片上传失败！！！");
+            }
+
+            if (fileURL == null) {
+                log.error("图片上传失败！！！");
+                throw new BusinessException("图片上传失败！！！");
+            }
+
+            // 将返回的URL进行内容检查
+
+            //  检查通过，将URL保存至数据库
+            wrapper.set("avatarUrl", fileURL);
+        }
 
         return BaseResponse.success(userService.update(wrapper));
     }
