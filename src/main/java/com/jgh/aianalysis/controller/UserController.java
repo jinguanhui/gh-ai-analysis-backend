@@ -9,7 +9,7 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
 import com.jgh.aianalysis.utils.RedisUtil;
-import com.jgh.aianalysis.utils.aliyun.FileGreenUtils;
+import com.jgh.aianalysis.utils.aliyun.ImageGreenUtils;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ResponseCode;
 import com.jgh.ghcommon.constant.UserConstant;
@@ -53,7 +53,7 @@ public class UserController {
     private AliyunOSSUtil aliyunOSSUtil;
 
     @Resource
-    private FileGreenUtils fileGreenUtils;
+    private ImageGreenUtils imageGreenUtils;
 
     /**
      * 用户注册
@@ -244,7 +244,7 @@ public class UserController {
             //  将图片上传至OSS
             String fileURL = null;
             try {
-                 fileURL = aliyunOSSUtil.getFileURL(multipartFile);
+                 fileURL = aliyunOSSUtil.getFileURL(multipartFile, "image");
             } catch (IOException e) {
                 log.error("图片上传失败！！！");
                 e.printStackTrace();
@@ -259,7 +259,7 @@ public class UserController {
             // 将返回的URL进行内容检查
             Map map = null;
             try {
-                map = fileGreenUtils.fileGreenCheck(fileURL);
+                map = imageGreenUtils.fileGreenCheck(fileURL, "image");
             } catch (Exception e) {
                 log.error("图片检测失败！！！");
                 throw new BusinessException("图片检测失败！！！");

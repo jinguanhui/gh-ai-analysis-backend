@@ -9,6 +9,8 @@ import com.jgh.aianalysis.mapper.ChartMapper;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
+import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
+import com.jgh.aianalysis.utils.aliyun.FileGreenUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.model.dto.chart.GenChartByAiRequest;
 import com.jgh.ghcommon.model.entity.Chart;
@@ -17,11 +19,14 @@ import com.jgh.ghcommon.model.vo.BiResponse;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,6 +46,12 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
     @Resource
     private SseEmitterManager sseEmitterManager;
+
+    @Resource
+    private AliyunOSSUtil aliyunOSSUtil;
+
+    @Resource
+    private FileGreenUtil fileGreenUtil;
 
     //  文件大小最多为1MB
     private final long MAX_FILE_SIZE = 1024 * 1024;
@@ -107,16 +118,69 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 baseResponse.setCode(200);
                 sseEmitterManager.sendProgress(baseResponse);
                 if (StringUtils.isBlank(goal)) {
+                    baseResponse.setMessage("请输入分析目标");
+                    baseResponse.setCode(500);
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("请输入分析目标");
                 }
                 if (StringUtils.isBlank(name)) {
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("请输入分析表的名称");
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("请输入分析表的名称");
                 }
                 if (StringUtils.isNotBlank(name) && name.length() > 100) {
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("名称过长");
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("名称过长");
+                }
+                //  将文档上传到OSS
+                String fileURL = null;
+                try {
+                    fileURL = aliyunOSSUtil.getFileURL(multipartFile, "file");
+                } catch (IOException e) {
+                    log.error("上传文件失败！", e);
+                    baseResponse.setMessage("上传文件失败！！！");
+                    baseResponse.setCode(500);
+                    sseEmitterManager.sendProgress(baseResponse);
+                    sseEmitterManager.removeEmitter(taskId);
+                    e.printStackTrace();
+                    throw new BusinessException("上传文件失败！！！");
+                }
+
+                if (fileURL == null) {
+                    log.error("上传文件失败！");
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("上传文件失败！！！");
+                    sseEmitterManager.sendProgress(baseResponse);
+                    sseEmitterManager.removeEmitter(taskId);
+                    throw new BusinessException("上传文件失败！！！");
+                }
+
+                //  对文档检测
+                Map map = null;
+                try {
+                    map = fileGreenUtil.fileGreenCheck(fileURL, "file");
+                } catch (Exception e) {
+                    log.error("文件存在不合规内容！！！");
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("文件存在不合规内容！！！");
+                    sseEmitterManager.sendProgress(baseResponse);
+                    sseEmitterManager.removeEmitter(taskId);
+                    throw new BusinessException("文件存在不合规内容！！！");
+                }
+
+                if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
+                    log.error("文件检测失败！！！内容不合规");
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("文件检测失败！！！内容不合规");
+                    sseEmitterManager.sendProgress(baseResponse);
+                    sseEmitterManager.removeEmitter(taskId);
+                    throw new BusinessException("文件检测失败！！！内容不合规");
                 }
 
                 // 2. 文件处理（30%）
@@ -141,6 +205,9 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 String result = aIManager.doChat(goal,CsvData, chartType);
                 String[] splits = result.split("【【【【【");
                 if (splits.length < 3) {
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("AI生成错误！");
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("AI生成错误！");
                 }
@@ -169,6 +236,9 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                 boolean saveResult = this.save(chart);
                 if (!saveResult) {
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("数据库插入错误！");
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("数据库插入错误！");
                 }
@@ -188,18 +258,27 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                 User user = userService.getById(userId2);
                 if (user == null) {
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("用户不存在！");
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("用户不存在！");
                 }
                 user.setInvokeCount(user.getInvokeCount() - 1);
                 boolean b = userService.updateById(user);
                 if (!b) {
+                    baseResponse.setCode(500);
+                    baseResponse.setMessage("数据库更新错误！");
+                    sseEmitterManager.sendProgress(baseResponse);
                     sseEmitterManager.removeEmitter(taskId);
                     throw new BusinessException("数据库更新错误！");
                 }
 
             } catch (Exception e) {
                 // 发送错误信息
+                baseResponse.setCode(500);
+                baseResponse.setMessage("任务执行错误！");
+                sseEmitterManager.sendProgress(baseResponse);
                 sseEmitterManager.removeEmitter(taskId);
                 throw new BusinessException("任务执行错误！");
             } finally {

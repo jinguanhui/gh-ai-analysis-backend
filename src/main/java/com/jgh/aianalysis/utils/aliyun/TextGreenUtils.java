@@ -14,7 +14,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 @Slf4j
@@ -89,7 +91,11 @@ public class TextGreenUtils {
                         TextModerationPlusResponseBody.TextModerationPlusResponseBodyData data = result.getData();
                         log.info(JSON.toJSONString(data, true));
                         log.info("风险等级为：{}", data.getRiskLevel());
-                        if ("none".equals(data.getRiskLevel())) {
+                        List<TextModerationPlusResponseBody.TextModerationPlusResponseBodyDataResult> responseBodyDataResults = data.getResult();
+                        List<String> collect = responseBodyDataResults.stream().
+                                map(TextModerationPlusResponseBody.TextModerationPlusResponseBodyDataResult::getLabel).
+                                toList();
+                        if (collect.contains("nonLabel")) {
                             log.info("审核通过");
                             resultMap.put("suggestion", "pass");
                         }else {

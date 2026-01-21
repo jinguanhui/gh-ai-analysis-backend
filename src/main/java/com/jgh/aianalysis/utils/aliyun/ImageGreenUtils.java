@@ -21,7 +21,7 @@ import java.util.UUID;
 
 @Component
 @Slf4j
-public class FileGreenUtils {
+public class ImageGreenUtils {
 
     @Value("${aliyun.green.accessKeyId}")
     private String accessKeyId;
@@ -35,7 +35,7 @@ public class FileGreenUtils {
     @Value("${aliyun.oss.bucketName}")
     private String bucketName;
 
-    public Map fileGreenCheck(String url) throws Exception {
+    public Map fileGreenCheck(String url, String fileType) throws Exception {
         //  1.
         Config config = new Config();
         config.setAccessKeyId(accessKeyId);
@@ -63,7 +63,7 @@ public class FileGreenUtils {
 
         //  https://ai-analysis-jgh.oss-cn-shenzhen.aliyuncs.com/68695d5b-416e-4447-b52f-bc15887e54ff.jpg
         //  将上面的URL地址转化为类似这种的文件名image/001.jpg
-        String file ="image"+ url.substring(url.lastIndexOf("/"));
+        String file =fileType+ url.substring(url.lastIndexOf("/"));
         log.info("阿里云OSS文件路径为：{}",  file);
         //待检测数据唯一标识
         serviceParameters.put("dataId", UUID.randomUUID().toString());
