@@ -1,6 +1,7 @@
 package com.jgh.aianalysis.handler;
 
 import com.jgh.aianalysis.exception.BusinessException;
+import com.jgh.aianalysis.manager.RedisLimiterManager;
 import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.IPUtils;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.ModelAndView;
 
 import java.util.Arrays;
 
@@ -29,6 +31,9 @@ public class MyInterceptor implements HandlerInterceptor {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private RedisLimiterManager redisLimiterManager;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -55,6 +60,12 @@ public class MyInterceptor implements HandlerInterceptor {
 
         if (request.getServletPath().equals("/chart/gen")) {
             Long userId = Long.valueOf(request.getHeader("userId"));
+            if (userId == null) {
+                log.error("未知用户");
+                throw new BusinessException("未知用户");
+            }
+            // 限流--针对用户和某一个方法的细粒度限流
+            redisLimiterManager.doRateLimit("/chart/gen" + userId);
 
             User user = userService.getById(userId);
             Integer invokeCount = user.getInvokeCount();
@@ -76,6 +87,11 @@ public class MyInterceptor implements HandlerInterceptor {
 
 
         return true;
+    }
+
+    @Override
+    public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+        HandlerInterceptor.super.postHandle(request, response, handler, modelAndView);
     }
 
     @Override

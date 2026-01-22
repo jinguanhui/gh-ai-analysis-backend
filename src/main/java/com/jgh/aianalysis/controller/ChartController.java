@@ -236,7 +236,7 @@ public class ChartController {
         long size = chartQueryRequest.getPageSize();
         Page<Chart> chartPage = chartService.page(new Page<>(current, size),
                 getQueryWrapper(chartQueryRequest));
-        log.info("chartPage.getRecords()");
+        log.info("查询记录："+chartPage.getRecords());
         return BaseResponse.success(chartPage);
     }
 
@@ -309,8 +309,8 @@ public class ChartController {
         queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
         //  根据时间范围查询--beginTime, endTime
         queryWrapper.between(ObjectUtils.isNotEmpty(beginTime) && ObjectUtils.isNotEmpty(endTime), "createTime", beginTime, endTime);
-        queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
-                sortField);
+        queryWrapper.orderBy(true, false,
+                "createTime");
         return queryWrapper;
     }
 
