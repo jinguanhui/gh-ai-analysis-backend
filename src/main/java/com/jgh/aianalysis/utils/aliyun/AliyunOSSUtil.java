@@ -34,15 +34,13 @@ public class AliyunOSSUtil {
     @Value("${aliyun.oss.bucketName}")
     private String bucketName;
 
-    public String getFileURL(MultipartFile multipartFile, String fileType) throws IOException {
+    public String getFileURL(InputStream fileInputStream, String originalFilename, String fileType) throws IOException {
         // Endpoint以华东1（杭州）为例，其它Region请按实际情况填写。
         // 从环境变量中获取访问凭证。运行本代码示例之前，请确保已设置环境变量OSS_ACCESS_KEY_ID和OSS_ACCESS_KEY_SECRET。
 
         // 获取上传的文件的输入流
-        InputStream inputStream = multipartFile.getInputStream();
 
         // 避免文件覆盖
-        String originalFilename = multipartFile.getOriginalFilename();
         //  获取当前时间戳--如2025-06-11-01-59-59
         String formattedTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"));
         String fileName = fileType +"/" + formattedTime + originalFilename.substring(originalFilename.lastIndexOf("."));
@@ -57,7 +55,7 @@ public class AliyunOSSUtil {
 
         try {
             // 创建PutObjectRequest对象。
-            PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, fileName, inputStream);
+            PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, fileName, fileInputStream);
             // 创建PutObject请求。
             PutObjectResult result = ossClient.putObject(putObjectRequest);
             url = endpoint.split("//")[0] + "//" + bucketName + "." + endpoint.split("//")[1] + "/" + fileName;

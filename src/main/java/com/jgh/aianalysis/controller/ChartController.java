@@ -25,6 +25,8 @@ import java.time.temporal.ValueRange;
 import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
+
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -117,9 +119,11 @@ public class ChartController {
     @PostMapping("/gen")
     public BaseResponse<BiResponse> genChartByAi(
             @RequestParam("file") MultipartFile multipartFile,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            HttpServletResponse  response) {
 
         log.info("智能分析controller！");
+
 
         /// 从RequestContextHolder获取当前请求，这应该是拦截器中设置的包装请求
         org.springframework.web.context.request.RequestAttributes requestAttributes =
@@ -148,10 +152,55 @@ public class ChartController {
     }
 
     /**
+     * 智能分析
+     * @param multipartFile
+     * @param request
+     * @return
+     */
+    @PostMapping("/gen/sync")
+    public BaseResponse<BiResponse> genChartByAiSync(
+            @RequestParam("file") MultipartFile multipartFile,
+            HttpServletRequest request,
+            HttpServletResponse  response) {
+
+        log.info("智能分析controller！");
+
+
+        /// 从RequestContextHolder获取当前请求，这应该是拦截器中设置的包装请求
+        org.springframework.web.context.request.RequestAttributes requestAttributes =
+                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+
+        HttpServletRequest currentRequest = null;
+        if (requestAttributes instanceof org.springframework.web.context.request.ServletRequestAttributes) {
+            currentRequest = ((org.springframework.web.context.request.ServletRequestAttributes) requestAttributes).getRequest();
+        }
+
+        String name = currentRequest.getParameter("name");
+        String goal = currentRequest.getParameter("goal");
+        String chartType = currentRequest.getParameter("chartType");
+
+        if (StringUtils.isAnyBlank(name, goal, chartType)) {
+            throw new BusinessException("参数为空");
+        }
+
+        GenChartByAiRequest genChartByAiRequest = new GenChartByAiRequest();
+        genChartByAiRequest.setName(name);
+        genChartByAiRequest.setGoal(goal);
+        genChartByAiRequest.setChartType(chartType);
+
+
+        return chartService.genChartByAiSync(multipartFile, genChartByAiRequest, request);
+    }
+
+    /**
      * 第二步：建立SSE连接，监听进度
      */
     @GetMapping("/progress/{taskId}")
-    public SseEmitter listenProgress(@PathVariable String taskId) {
+    public SseEmitter listenProgress(@PathVariable String taskId, HttpServletResponse response) {
+        log.info("监听SSE进度！controller:listenProgress");
+//        // ========== 移到Controller层设置响应头 ==========
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
         // 创建SSE连接并缓存
         return sseEmitterManager.getEmitter(taskId);
     }

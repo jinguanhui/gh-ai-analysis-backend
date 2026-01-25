@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -244,7 +245,13 @@ public class UserController {
             //  将图片上传至OSS
             String fileURL = null;
             try {
-                 fileURL = aliyunOSSUtil.getFileURL(multipartFile, "image");
+                InputStream inputStream = multipartFile.getInputStream();
+                String originalFilename = multipartFile.getOriginalFilename();
+                if (originalFilename == null) {
+                    log.error("图片名称未知！！！");
+                    throw new BusinessException("图片名称未知！！！");
+                }
+                fileURL = aliyunOSSUtil.getFileURL(inputStream, originalFilename,"image");
             } catch (IOException e) {
                 log.error("图片上传失败！！！");
                 e.printStackTrace();

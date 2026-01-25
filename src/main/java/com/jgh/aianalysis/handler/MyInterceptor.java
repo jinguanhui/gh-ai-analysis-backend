@@ -55,7 +55,7 @@ public class MyInterceptor implements HandlerInterceptor {
 
         if (auth == null || !auth.equals("ghai")) {
             log.error("该请求不是从网关中转发的，拦截违法路径");
-            return false;
+            throw new BusinessException("检测到违法路径！！！");
         }
 
         if (request.getServletPath().equals("/chart/gen")) {
