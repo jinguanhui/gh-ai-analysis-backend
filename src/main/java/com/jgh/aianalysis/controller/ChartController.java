@@ -2,17 +2,15 @@ package com.jgh.aianalysis.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.rholder.retry.RetryException;
+import com.github.rholder.retry.Retryer;
 import com.jgh.aianalysis.annotation.AuthCheck;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
-import com.jgh.aianalysis.utils.SqlUtils;
-import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
-import com.jgh.aianalysis.utils.aliyun.FileGreenUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ResponseCode;
-import com.jgh.ghcommon.constant.CommonConstant;
 import com.jgh.ghcommon.constant.UserConstant;
 import com.jgh.ghcommon.model.dto.chart.*;
 import com.jgh.ghcommon.model.entity.Chart;
@@ -20,11 +18,10 @@ import com.jgh.ghcommon.model.vo.BiResponse;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 
-import java.io.IOException;
-import java.time.temporal.ValueRange;
 import java.util.Date;
-import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +51,9 @@ public class ChartController {
 
     @Resource
     private SseEmitterManager sseEmitterManager;
+
+    @Resource
+    private Retryer<Boolean> retryer;
 
 
 
@@ -147,8 +147,19 @@ public class ChartController {
         genChartByAiRequest.setGoal(goal);
         genChartByAiRequest.setChartType(chartType);
 
+        AtomicReference<BaseResponse<BiResponse>> biResponseBaseResponse = new AtomicReference<>();
+        try {
+            retryer.call(()->{
+                 biResponseBaseResponse.set(chartService.genChartByAi(multipartFile, genChartByAiRequest, request));
+                return true;
+            });
+        } catch (ExecutionException | RetryException e) {
+            log.error("当前系统繁忙，请稍后再试！", e);
+            throw new BusinessException("当前系统繁忙，请稍后再试！");
+        }
 
-        return chartService.genChartByAi(multipartFile, genChartByAiRequest, request);
+
+        return biResponseBaseResponse.get();
     }
 
     /**
@@ -285,7 +296,6 @@ public class ChartController {
         long size = chartQueryRequest.getPageSize();
         Page<Chart> chartPage = chartService.page(new Page<>(current, size),
                 getQueryWrapper(chartQueryRequest));
-        log.info("查询记录："+chartPage.getRecords());
         return BaseResponse.success(chartPage);
     }
 

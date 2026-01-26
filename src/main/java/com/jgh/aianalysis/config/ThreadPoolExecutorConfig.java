@@ -37,10 +37,10 @@ public class ThreadPoolExecutorConfig {
         // 非核心线程空闲时间为100秒，任务队列为阻塞队列，长度为4，使用自定义的线程工厂创建线程
         return new ThreadPoolExecutor(
                 2,
-                4,
+                2,
                 100,
                 TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(4),
+                new ArrayBlockingQueue<>(2),
                 threadFactory);
     }
 }

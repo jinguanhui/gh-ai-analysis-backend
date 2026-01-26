@@ -53,10 +53,10 @@ public class MyInterceptor implements HandlerInterceptor {
         log.info("用户的请求地址:{}", localHost);
         log.info("用户的请求ServletPath:{}", url);
 
-        if (auth == null || !auth.equals("ghai")) {
-            log.error("该请求不是从网关中转发的，拦截违法路径");
-            throw new BusinessException("检测到违法路径！！！");
-        }
+//        if (auth == null || !auth.equals("ghai")) {
+//            log.error("该请求不是从网关中转发的，拦截违法路径");
+//            throw new BusinessException("检测到违法路径！！！");
+//        }
 
         if (request.getServletPath().equals("/chart/gen")) {
             Long userId = Long.valueOf(request.getHeader("userId"));
