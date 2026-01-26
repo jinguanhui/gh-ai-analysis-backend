@@ -17,11 +17,6 @@ public class GlobalExceptionHandler {
         return BaseResponse.error(e.getCode(), e.getMessage());
     }
 
-    @ExceptionHandler(TimeOutException.class)
-    public BaseResponse<?> timeOutHandler(TimeOutException e) {
-        return BaseResponse.error(e.getCode(), e.getMessage());
-    }
-
     @ExceptionHandler(RuntimeException.class)
     public BaseResponse<?> runtimeExceptionHandler(RuntimeException e) {
         return BaseResponse.error(ResponseCode.ERROR, e.getMessage());

@@ -3,10 +3,9 @@ package com.jgh.aianalysis.service.impl;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.jgh.aianalysis.exception.TimeOutException;
-import com.jgh.aianalysis.manager.ai.AIManager;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
+import com.jgh.aianalysis.manager.ai.AIManager;
 import com.jgh.aianalysis.mapper.ChartMapper;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
@@ -25,7 +24,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StopWatch;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
@@ -37,8 +35,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * @author jgh
@@ -147,11 +143,6 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 throw new BusinessException("没有文件名！");
             }
             CompletableFuture.runAsync(() -> {
-                // 在你的方法中使用
-                StopWatch stopWatch = new StopWatch();
-                stopWatch.start();
-
-
                 try {
 
                     // 创建一个HashMap存储线程池的状态信息
@@ -308,27 +299,6 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                         log.error("数据库更新错误！");
                         handleSseError(baseResponse, "数据库更新错误！", taskId);
                         throw new BusinessException("数据库更新错误！");
-                    }
-
-                    stopWatch.stop();
-                    log.info("方法执行耗时: {}秒{}毫秒", stopWatch.getTotalTimeMillis() / 1000, stopWatch.getTotalTimeMillis() % 1000);
-                    long totalTimeMillis = stopWatch.getTotalTimeMillis();
-                    //  如果方法的执行时间超过20s就抛出异常
-                    if (totalTimeMillis > 20000) {
-                        log.error("请求方法执行时间过长，请检查方法：异步智能分析");
-                        Chart chart1 = new Chart();
-                        chart1.setId(chartResult.getId());
-                        chart1.setStatus(ChartStatusEnum.WAIT.getStatus());
-                        chart1.setExecMessage(ChartStatusEnum.WAIT.getExecMessage() + ": 任务执行时间过长，正在为您重试");
-                        boolean updateResult1 = this.updateById(chart1);
-                        if (!updateResult1) {
-                            log.error("数据库更新错误！");
-                            handleSseError(baseResponse, "数据库更新错误！", taskId);
-                            throw new BusinessException("数据库更新错误！");
-                        }
-                        // 发送错误信息到前端
-                        handleSseError(baseResponse, "任务执行时间过长，等待重试", taskId);
-                        throw new BusinessException("请求方法执行时间过长！！！");
                     }
                     // 5. 完成任务（100%）
                     log.info("任务完成...");
