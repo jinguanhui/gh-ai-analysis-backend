@@ -1,5 +1,6 @@
 package com.jgh.aianalysis.aop;
 
+import cn.hutool.core.date.DateUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -54,6 +55,11 @@ public class LogInterceptor {
         // 输出响应日志
         stopWatch.stop();
         long totalTimeMillis = stopWatch.getTotalTimeMillis();
+        //  如果方法的执行时间超过20s就抛出异常
+        if (totalTimeMillis > 5000){
+            log.error("请求方法执行时间过长，请检查方法：{}", url);
+            throw new RuntimeException("请求方法执行时间过长，请检查方法：");
+        }
         log.info("请求结束, id: {}, cost: {}ms", requestId, totalTimeMillis);
         return result;
     }

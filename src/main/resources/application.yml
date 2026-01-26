@@ -1,5 +1,25 @@
 # DataSource Config
 spring:
+  mail:
+    # 发送者邮箱
+    username: 2708637848@qq.com
+    #申请到的授权码
+    password: lqrcewcbzuwzdgfi
+    # 配置 SMTP 服务器地址
+    host: smtp.qq.com
+    # 端口号465或587
+    port: 465
+    protocol: smtps
+    # 默认的邮件编码为UTF-8
+    default-encoding: UTF-8
+    # 配置SSL 加密工厂
+    properties:
+      mail:
+        smtp:
+          socketFactoryClass: javax.net.ssl.SSLSocketFactory
+          #表示开启 DEBUG 模式，这样，邮件发送过程的日志会在控制台打印出来，方便排查错误
+          debug: true
+          ssl: true
   # application.yml
   ai:
     dashscope:
@@ -63,6 +83,15 @@ aliyun:
   dypnsapi:
     access-key-id: LTAI5tDrz8uACCj1WEndWA9F
     access-key-secret: 3zkKT5wsf4VopttTrEEGXyQrvEiyuW
+  green:
+    accessKeyId: LTAI5t8X1sC4BHN8a9yjWHxD
+    accessSecret: naEV3KuS2isJn6Og1EO9VuaswGww8u
+  oss:
+    accessKey: LTAI5t8X1sC4BHN8a9yjWHxD
+    secretKey: naEV3KuS2isJn6Og1EO9VuaswGww8u
+    bucketName: ai-analysis-jgh
+    endpoint: https://oss-cn-shenzhen.aliyuncs.com
+    region: cn-shenzhen
 
 springdoc:
   swagger-ui:
