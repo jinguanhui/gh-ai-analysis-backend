@@ -336,7 +336,25 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 }
             }, threadPoolExecutor);
         } catch (Exception e) {
+            try {
+                Chart chart = new Chart();
+                chart.setId(chartResult.getId());
+                chart.setStatus(ChartStatusEnum.FAILED.getStatus());
+                chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage() + ":" +e.getMessage());
+                boolean updateResult = this.updateById(chart);
+                if (!updateResult) {
+                    log.error("数据库更新错误！");
+                    handleSseError(baseResponse, "数据库更新错误！", taskId);
+                    throw new BusinessException("数据库更新错误！");
+                }
+            } catch (BusinessException ex) {
+                log.error("数据库更新错误！");
+                ex.printStackTrace();
+                handleSseError(baseResponse, "数据库更新错误！", taskId);
+                throw new BusinessException("数据库更新错误");
+            }
             log.error("异步任务执行错误！", e);
+            handleSseError(baseResponse, "任务执行错误！", taskId);
             throw new BusinessException("任务执行错误!!!");
         }
 
@@ -612,7 +630,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     }
 
     private void handleSseError(BaseResponse<BiResponse> baseResponse, String goal, String taskId) {
-        log.error("sse执行错误！！！");
+        log.error("sse执行错误！！！:"+ goal);
         baseResponse.setMessage(goal);
         baseResponse.setCode(500);
         sseEmitterManager.sendProgress(baseResponse);
