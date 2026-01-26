@@ -81,10 +81,10 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     public BaseResponse<BiResponse> genChartByAi(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
 
         int size1 = threadPoolExecutor.getQueue().size();
-        if (size1 == 1) {
-            log.error("当前系统繁忙，请稍后再试！");
-            throw new BusinessException("当前系统繁忙，请稍后再试！");
-        }
+//        if (size1 == 1) {
+//            log.error("当前系统繁忙，请稍后再试！");
+//            throw new BusinessException("当前系统繁忙，请稍后再试！");
+//        }
 
         String name = genChartByAiRequest.getName();
         String goal = genChartByAiRequest.getGoal();
@@ -131,9 +131,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
             throw new BusinessException("图表保存失败！");
         }
 
-
-
-
+        biResponse.setChartId(chartResult.getId());
         // 启动异步任务进行图表生成
         try {
             // 立即复制文件到安全位置
@@ -278,6 +276,10 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                         handleSseError(baseResponse, "用户不存在！", taskId);
                         throw new BusinessException("用户不存在！");
                     }
+                    if (user.getInvokeCount() < 1) {
+                        handleSseError(baseResponse, "调用次数不足！", taskId);
+                        throw new BusinessException("调用次数不足！");
+                    }
                     user.setInvokeCount(user.getInvokeCount() - 1);
                     boolean b = userService.updateById(user);
                     if (!b) {
@@ -311,7 +313,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                         Chart chart = new Chart();
                         chart.setId(chartResult.getId());
                         chart.setStatus(ChartStatusEnum.FAILED.getStatus());
-                        chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage());
+                        chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage() + ":" +e.getMessage());
                         boolean updateResult = this.updateById(chart);
                         if (!updateResult) {
                             log.error("数据库更新错误！");
@@ -569,7 +571,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 Chart chart = new Chart();
                 chart.setId(chartResult.getId());
                 chart.setStatus(ChartStatusEnum.FAILED.getStatus());
-                chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage());
+                chart.setExecMessage(e.getMessage());
                 boolean updateResult = this.updateById(chart);
                 if (!updateResult) {
                     log.error("数据库更新错误！");

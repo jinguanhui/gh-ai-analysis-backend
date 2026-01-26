@@ -1,9 +1,6 @@
 package com.jgh.aianalysis.config;
 
-import com.github.rholder.retry.Retryer;
-import com.github.rholder.retry.RetryerBuilder;
-import com.github.rholder.retry.StopStrategies;
-import com.github.rholder.retry.WaitStrategies;
+import com.github.rholder.retry.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,6 +20,8 @@ public class RetryConfig {
                 .retryIfExceptionOfType(RejectedExecutionException.class)
                 .withStopStrategy(StopStrategies.stopAfterAttempt(3))
                 .withWaitStrategy(WaitStrategies.fixedWait(10, TimeUnit.SECONDS))
+                .withRetryListener(new MyRetryListener<>())
                 .build();
     }
+
 }
