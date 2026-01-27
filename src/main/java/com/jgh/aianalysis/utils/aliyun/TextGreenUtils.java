@@ -36,15 +36,15 @@ public class TextGreenUtils {
         config.setRegionId("cn-shenzhen");
         config.setEndpoint("green-cip.cn-shenzhen.aliyuncs.com");
         //读取时超时时间，单位毫秒（ms）。
-        config.setReadTimeout(6000);
+        config.setReadTimeout(600000);
         //连接时超时时间，单位毫秒（ms）。
-        config.setConnectTimeout(3000);
+        config.setConnectTimeout(300000);
         Client client = new Client(config);
 
         // 创建RuntimeObject实例并设置运行参数。
         RuntimeOptions runtime = new RuntimeOptions();
-        runtime.readTimeout = 10000;
-        runtime.connectTimeout = 10000;
+        runtime.readTimeout = 1000000;
+        runtime.connectTimeout = 1000000;
 
 
         //检测参数构造

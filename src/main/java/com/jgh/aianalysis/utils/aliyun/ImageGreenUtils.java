@@ -47,6 +47,10 @@ public class ImageGreenUtils {
         // 接入区域和地址请根据实际情况修改
         config.setRegionId("cn-shenzhen");
         config.setEndpoint("green-cip.cn-shenzhen.aliyuncs.com");
+        //连接时超时时间，单位毫秒（ms）。
+        config.setReadTimeout(100000);
+        //读取时超时时间，单位毫秒（ms）。
+        config.setConnectTimeout(300000);
 
 
         //  2.

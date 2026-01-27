@@ -2,6 +2,7 @@ package com.jgh.aianalysis.service.impl;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONUtil;
+import com.aliyun.tea.TeaUnretryableException;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
@@ -311,15 +313,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 } catch (Exception e) {
                     try {
                         Chart chart = new Chart();
-                        chart.setId(chartResult.getId());
-                        chart.setStatus(ChartStatusEnum.FAILED.getStatus());
-                        chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage() + ":" + e.getMessage());
-                        boolean updateResult = this.updateById(chart);
-                        if (!updateResult) {
-                            log.error("数据库更新错误！");
-                            handleSseError(baseResponse, "数据库更新错误！", taskId);
-                            throw new BusinessException("数据库更新错误！");
-                        }
+                        handleDatabase(e, chart, chartResult, baseResponse, taskId);
                     } catch (BusinessException ex) {
                         log.error("数据库更新错误！");
                         ex.printStackTrace();
@@ -335,18 +329,33 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                     sseEmitterManager.removeEmitter(taskId);
                 }
             }, threadPoolExecutor);
-        } catch (Exception e) {
-            try {
+        } catch (TeaUnretryableException e) {
+            // 记录日志但不直接抛出业务异常
+            log.error("文件审核服务调用失败，可能是网络问题", e);
+            // 可以选择跳过审核或使用默认处理
+            throw new BusinessException("文件审核服务暂时不可用，请稍后重试");
+        }
+        catch (Exception e) {
+            if (e instanceof RejectedExecutionException) {
                 Chart chart = new Chart();
                 chart.setId(chartResult.getId());
-                chart.setStatus(ChartStatusEnum.FAILED.getStatus());
-                chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage() + ":" +e.getMessage());
+                chart.setStatus(ChartStatusEnum.WAIT.getStatus());
+                chart.setExecMessage("当前任务繁忙，售后将为你重试");
                 boolean updateResult = this.updateById(chart);
                 if (!updateResult) {
                     log.error("数据库更新错误！");
                     handleSseError(baseResponse, "数据库更新错误！", taskId);
                     throw new BusinessException("数据库更新错误！");
                 }
+                try {
+                    throw e;
+                } catch (IOException ex) {
+                    throw new RejectedExecutionException(ex);
+                }
+            }
+            try {
+                Chart chart = new Chart();
+                handleDatabase(e, chart, chartResult, baseResponse, taskId);
             } catch (BusinessException ex) {
                 log.error("数据库更新错误！");
                 ex.printStackTrace();
@@ -366,6 +375,22 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         baseResponse.setMessage("任务提交成功！");
 
         return baseResponse;
+    }
+
+    private void handleDatabase(Exception e, Chart chart, Chart chartResult, BaseResponse<BiResponse> baseResponse, String taskId) {
+        chart.setId(chartResult.getId());
+        chart.setStatus(ChartStatusEnum.FAILED.getStatus());
+        if (e == null) {
+            chart.setStatus(ChartStatusEnum.FAILED.getStatus());
+        }else {
+            chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage() + ":" + e.getMessage());
+        }
+        boolean updateResult = this.updateById(chart);
+        if (!updateResult) {
+            log.error("数据库更新错误！");
+            handleSseError(baseResponse, "数据库更新错误！", taskId);
+            throw new BusinessException("数据库更新错误！");
+        }
     }
 
     @Override

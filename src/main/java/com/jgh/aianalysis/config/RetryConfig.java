@@ -22,7 +22,8 @@ public class RetryConfig {
                 .retryIfExceptionOfType(IOException.class)
                 .retryIfExceptionOfType(RejectedExecutionException.class)
                 .withStopStrategy(StopStrategies.stopAfterAttempt(3))
-                .withWaitStrategy(WaitStrategies.fixedWait(10, TimeUnit.SECONDS))
+                //  递增重试，第一次为10，第二次为30，第三次为60--依次间隔10、20、30秒
+                .withWaitStrategy(WaitStrategies.incrementingWait(10, TimeUnit.SECONDS,10, TimeUnit.SECONDS))
                 .withRetryListener(new MyRetryListener<>())
                 .build();
     }

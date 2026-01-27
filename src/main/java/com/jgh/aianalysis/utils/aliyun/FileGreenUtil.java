@@ -48,9 +48,9 @@ public class FileGreenUtil {
         config.setRegionId("cn-shenzhen");
         config.setEndpoint("green-cip.cn-shenzhen.aliyuncs.com");
         //连接时超时时间，单位毫秒（ms）。
-        config.setReadTimeout(6000);
+        config.setReadTimeout(100000);
         //读取时超时时间，单位毫秒（ms）。
-        config.setConnectTimeout(3000);
+        config.setConnectTimeout(300000);
 
 
         //  2.
