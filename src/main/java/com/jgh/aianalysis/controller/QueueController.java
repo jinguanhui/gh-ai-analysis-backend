@@ -27,6 +27,9 @@ public class QueueController {
     // 自动注入一个线程池的实例
     private ThreadPoolExecutor threadPoolExecutor;
 
+    @Resource
+    private ThreadPoolExecutor threadPoolExecutorRetry;
+
     @GetMapping("/add")
     // 接收一个参数name，然后将任务添加到线程池中
     public void add(String name) {
@@ -63,6 +66,31 @@ public class QueueController {
         map.put("已完成任务数", completedTaskCount);
         // 获取线程池中正在执行任务的线程数
         int activeCount = threadPoolExecutor.getActiveCount();
+        // 将正在工作的线程数放入map中
+        map.put("正在工作的线程数", activeCount);
+        // 将map转换为JSON字符串并返回
+        return JSONUtil.toJsonStr(map);
+    }
+
+    @GetMapping("/get/retry")
+    // 该方法返回线程池的状态信息
+    public String getRetry() {
+        // 创建一个HashMap存储线程池的状态信息
+        Map<String, Object> map = new HashMap<>();
+        // 获取线程池的队列长度
+        int size = threadPoolExecutorRetry.getQueue().size();
+        // 将队列长度放入map中
+        map.put("队列长度", size);
+        // 获取线程池已接收的任务总数
+        long taskCount = threadPoolExecutorRetry.getTaskCount();
+        // 将任务总数放入map中
+        map.put("任务总数", taskCount);
+        // 获取线程池已完成的任务数
+        long completedTaskCount = threadPoolExecutorRetry.getCompletedTaskCount();
+        // 将已完成的任务数放入map中
+        map.put("已完成任务数", completedTaskCount);
+        // 获取线程池中正在执行任务的线程数
+        int activeCount = threadPoolExecutorRetry.getActiveCount();
         // 将正在工作的线程数放入map中
         map.put("正在工作的线程数", activeCount);
         // 将map转换为JSON字符串并返回

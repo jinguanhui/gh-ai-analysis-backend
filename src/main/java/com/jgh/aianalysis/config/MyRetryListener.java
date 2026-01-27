@@ -14,7 +14,7 @@ public class MyRetryListener<T> implements RetryListener {
         log.info("重试次数=" + attempt.getAttemptNumber());
  
         // 距离第一次重试的延迟
-        log.info(",延迟=" + attempt.getDelaySinceFirstAttempt());
+        log.info(",延迟=" + attempt.getDelaySinceFirstAttempt()/1000+"秒");
  
         // 重试结果: 是异常终止, 还是正常返回
         log.info(",hasException=" + attempt.hasException());

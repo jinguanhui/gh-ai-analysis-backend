@@ -52,8 +52,7 @@ public class ChartController {
     @Resource
     private SseEmitterManager sseEmitterManager;
 
-    @Resource
-    private Retryer<Boolean> retryer;
+
 
 
 
@@ -147,19 +146,7 @@ public class ChartController {
         genChartByAiRequest.setGoal(goal);
         genChartByAiRequest.setChartType(chartType);
 
-        AtomicReference<BaseResponse<BiResponse>> biResponseBaseResponse = new AtomicReference<>();
-        try {
-            retryer.call(()->{
-                 biResponseBaseResponse.set(chartService.genChartByAi(multipartFile, genChartByAiRequest, request));
-                return true;
-            });
-        } catch (ExecutionException | RetryException e) {
-            log.error("当前系统繁忙，请稍后再试！", e);
-            throw new BusinessException("当前系统繁忙，请稍后再试！");
-        }
-
-
-        return biResponseBaseResponse.get();
+        return chartService.genChartByAi(multipartFile, genChartByAiRequest, request);
     }
 
     /**

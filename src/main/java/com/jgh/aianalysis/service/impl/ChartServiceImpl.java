@@ -4,6 +4,8 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONUtil;
 import com.aliyun.tea.TeaUnretryableException;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.rholder.retry.RetryException;
+import com.github.rholder.retry.Retryer;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.manager.ai.AIManager;
@@ -35,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -63,6 +66,12 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
     @Resource
     private ThreadPoolExecutor threadPoolExecutor;
+
+    @Resource
+    private ThreadPoolExecutor threadPoolExecutorRetry;
+
+    @Resource
+    private Retryer<Boolean> retryer;
 
     //  文件大小最多为1MB
     private final long MAX_FILE_SIZE = 1024 * 1024;
@@ -134,7 +143,9 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         }
 
         biResponse.setChartId(chartResult.getId());
-        // 启动异步任务进行图表生成
+
+
+        //  异步提交任务
         try {
             // 立即复制文件到安全位置
             byte[] fileBytes = multipartFile.getBytes();
@@ -144,228 +155,244 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                 handleSseError(baseResponse, "没有文件名！", taskId);
                 throw new BusinessException("没有文件名！");
             }
-            CompletableFuture.runAsync(() -> {
+            CompletableFuture.runAsync(()-> {
                 try {
+                    retryer.call(() -> {
+                        // 启动异步任务进行图表生成
+                        try {
+                            CompletableFuture.runAsync(() -> {
+                                try {
 
-                    // 创建一个HashMap存储线程池的状态信息
-                    Map<String, Object> threadMap = new HashMap<>();
-                    // 获取线程池的队列长度
-                    int sizeQueue = threadPoolExecutor.getQueue().size();
-                    // 将队列长度放入map中
-                    threadMap.put("队列长度", sizeQueue);
-                    // 获取线程池已接收的任务总数
-                    long taskCount = threadPoolExecutor.getTaskCount();
-                    // 将任务总数放入map中
-                    threadMap.put("任务总数", taskCount);
-                    // 获取线程池已完成的任务数
-                    long completedTaskCount = threadPoolExecutor.getCompletedTaskCount();
-                    // 将已完成的任务数放入map中
-                    threadMap.put("已完成任务数", completedTaskCount);
-                    // 获取线程池中正在执行任务的线程数
-                    int activeCount = threadPoolExecutor.getActiveCount();
-                    // 将正在工作的线程数放入map中
-                    threadMap.put("正在工作的线程数", activeCount);
-                    // 将map转换为JSON字符串并返回
-                    log.info("线程池状态" + JSONUtil.toJsonStr(threadMap));
-                    Chart updateChart = new Chart();
-                    updateChart.setId(chartResult.getId());
-                    updateChart.setStatus(ChartStatusEnum.RUNNING.getStatus());
-                    updateChart.setExecMessage(ChartStatusEnum.RUNNING.getExecMessage());
-                    boolean b1 = updateById(updateChart);
-                    if (!b1) {
-                        log.error("图表更新失败！");
-                        handleSseError(baseResponse, "图表更新失败！", taskId);
-                        throw new BusinessException("图表更新失败！");
-                    }
+                                    // 创建一个HashMap存储线程池的状态信息
+                                    Map<String, Object> threadMap = new HashMap<>();
+                                    // 获取线程池的队列长度
+                                    int sizeQueue = threadPoolExecutor.getQueue().size();
+                                    // 将队列长度放入map中
+                                    threadMap.put("队列长度", sizeQueue);
+                                    // 获取线程池已接收的任务总数
+                                    long taskCount = threadPoolExecutor.getTaskCount();
+                                    // 将任务总数放入map中
+                                    threadMap.put("任务总数", taskCount);
+                                    // 获取线程池已完成的任务数
+                                    long completedTaskCount = threadPoolExecutor.getCompletedTaskCount();
+                                    // 将已完成的任务数放入map中
+                                    threadMap.put("已完成任务数", completedTaskCount);
+                                    // 获取线程池中正在执行任务的线程数
+                                    int activeCount = threadPoolExecutor.getActiveCount();
+                                    // 将正在工作的线程数放入map中
+                                    threadMap.put("正在工作的线程数", activeCount);
+                                    // 将map转换为JSON字符串并返回
+                                    log.info("线程池状态" + JSONUtil.toJsonStr(threadMap));
+                                    Chart updateChart = new Chart();
+                                    updateChart.setId(chartResult.getId());
+                                    updateChart.setStatus(ChartStatusEnum.RUNNING.getStatus());
+                                    updateChart.setExecMessage(ChartStatusEnum.RUNNING.getExecMessage());
+                                    boolean b1 = updateById(updateChart);
+                                    if (!b1) {
+                                        log.error("图表更新失败！");
+                                        handleSseError(baseResponse, "图表更新失败！", taskId);
+                                        throw new BusinessException("图表更新失败！");
+                                    }
 
-                    Long userId2 = userId;
-                    // 1. 验证参数（10%）
-                    log.info("开始处理参数...");
-                    biResponse.setTaskId(taskId);
-                    handleSseSend(biResponse, "正在处理参数...", 10, baseResponse);
-                    if (StringUtils.isBlank(goal)) {
-                        handleSseError(baseResponse, "请输入分析目标", taskId);
-                        throw new BusinessException("请输入分析目标");
-                    }
-                    if (StringUtils.isBlank(name)) {
-                        handleSseError(baseResponse, "请输入分析表的名称", taskId);
-                        throw new BusinessException("请输入分析表的名称");
-                    }
-                    if (StringUtils.isNotBlank(name) && name.length() > 100) {
-                        handleSseError(baseResponse, "名称过长", taskId);
-                        throw new BusinessException("名称过长");
-                    }
-                    //  将文档上传到OSS
-                    String fileURL = null;
-                    try {
-                        // 使用预读取的文件字节数组创建输入流上传到OSS
-                        ByteArrayInputStream inputStream = new ByteArrayInputStream(fileBytes);
-                        fileURL = aliyunOSSUtil.getFileURL(inputStream, originalFilename1, "file");
-                    } catch (IOException e) {
-                        log.error("上传文件失败！", e);
-                        handleSseError(baseResponse, "上传文件失败！！！", taskId);
-                        e.printStackTrace();
-                        throw new BusinessException("上传文件失败！！！");
-                    }
+                                    Long userId2 = userId;
+                                    // 1. 验证参数（10%）
+                                    log.info("开始处理参数...");
+                                    biResponse.setTaskId(taskId);
+                                    handleSseSend(biResponse, "正在处理参数...", 10, baseResponse);
+                                    if (StringUtils.isBlank(goal)) {
+                                        handleSseError(baseResponse, "请输入分析目标", taskId);
+                                        throw new BusinessException("请输入分析目标");
+                                    }
+                                    if (StringUtils.isBlank(name)) {
+                                        handleSseError(baseResponse, "请输入分析表的名称", taskId);
+                                        throw new BusinessException("请输入分析表的名称");
+                                    }
+                                    if (StringUtils.isNotBlank(name) && name.length() > 100) {
+                                        handleSseError(baseResponse, "名称过长", taskId);
+                                        throw new BusinessException("名称过长");
+                                    }
+                                    //  将文档上传到OSS
+                                    String fileURL = null;
+                                    try {
+                                        // 使用预读取的文件字节数组创建输入流上传到OSS
+                                        ByteArrayInputStream inputStream = new ByteArrayInputStream(fileBytes);
+                                        fileURL = aliyunOSSUtil.getFileURL(inputStream, originalFilename1, "file");
+                                    } catch (IOException e) {
+                                        log.error("上传文件失败！", e);
+                                        handleSseError(baseResponse, "上传文件失败！！！", taskId);
+                                        e.printStackTrace();
+                                        throw new BusinessException("上传文件失败！！！");
+                                    }
 
-                    if (fileURL == null) {
-                        log.error("上传文件失败！");
-                        handleSseError(baseResponse, "上传文件失败！！！", taskId);
-                        throw new BusinessException("上传文件失败！！！");
-                    }
+                                    if (fileURL == null) {
+                                        log.error("上传文件失败！");
+                                        handleSseError(baseResponse, "上传文件失败！！！", taskId);
+                                        throw new BusinessException("上传文件失败！！！");
+                                    }
 
-                    //  对文档检测
-                    Map map = null;
-                    try {
-                        map = fileGreenUtil.fileGreenCheck(fileURL, "file");
-                    } catch (Exception e) {
-                        log.error("文件存在不合规内容！！！");
-                        handleSseError(baseResponse, "文件存在不合规内容！！！", taskId);
-                        throw new BusinessException("文件存在不合规内容！！！");
-                    }
+                                    //  对文档检测
+                                    Map map = null;
+                                    try {
+                                        map = fileGreenUtil.fileGreenCheck(fileURL, "file");
+                                    } catch (Exception e) {
+                                        log.error("文件存在不合规内容！！！");
+                                        handleSseError(baseResponse, "文件存在不合规内容！！！", taskId);
+                                        throw new BusinessException("文件存在不合规内容！！！");
+                                    }
 
-                    if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
-                        log.error("文件检测失败！！！内容不合规");
-                        handleSseError(baseResponse, "文件检测失败！！！内容不合规", taskId);
-                        throw new BusinessException("文件检测失败！！！内容不合规");
-                    }
+                                    if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
+                                        log.error("文件检测失败！！！内容不合规");
+                                        handleSseError(baseResponse, "文件检测失败！！！内容不合规", taskId);
+                                        throw new BusinessException("文件检测失败！！！内容不合规");
+                                    }
 
-                    // 2. 文件处理（30%）
-                    log.info("开始处理Excel文件...");
-                    handleSseSend(biResponse, "正在处理Excel文件...", 30, baseResponse);
+                                    // 2. 文件处理（30%）
+                                    log.info("开始处理Excel文件...");
+                                    handleSseSend(biResponse, "正在处理Excel文件...", 30, baseResponse);
 
-                    String CsvData = ExcelUtils.excelToCsvFromBytes(fileBytes);
+                                    String CsvData = ExcelUtils.excelToCsvFromBytes(fileBytes);
 
-                    // 3. AI分析（60%）
-                    log.info("开始进行AI分析...");
-                    handleSseSend(biResponse, "正在进行AI分析...", 60, baseResponse);
+                                    // 3. AI分析（60%）
+                                    log.info("开始进行AI分析...");
+                                    handleSseSend(biResponse, "正在进行AI分析...", 60, baseResponse);
 
-                    String result = aIManager.doChat(goal, CsvData, chartType);
-                    String[] splits = result.split("【【【【【");
-                    if (splits.length < 3) {
-                        handleSseError(baseResponse, "AI生成错误！", taskId);
-                        throw new BusinessException("AI生成错误！");
-                    }
+                                    String result = aIManager.doChat(goal, CsvData, chartType);
+                                    String[] splits = result.split("【【【【【");
+                                    if (splits.length < 3) {
+                                        handleSseError(baseResponse, "AI生成错误！", taskId);
+                                        throw new BusinessException("AI生成错误！");
+                                    }
 
 
-                    // 4. 保存数据（80%）
-                    log.info("正在保存数据...");
-                    handleSseSend(biResponse, "正在保存数据...", 80, baseResponse);
-                    String genChart = splits[1].trim();
-                    String genResult = splits[2].trim();
+                                    // 4. 保存数据（80%）
+                                    log.info("正在保存数据...");
+                                    handleSseSend(biResponse, "正在保存数据...", 80, baseResponse);
+                                    String genChart = splits[1].trim();
+                                    String genResult = splits[2].trim();
 
+                                    Chart chart = new Chart();
+                                    chart.setId(chartResult.getId());
+                                    chart.setName(name);
+                                    chart.setGoal(goal);
+                                    chart.setChartData(CsvData);
+                                    chart.setChartType(chartType);
+                                    chart.setGenChart(genChart);
+                                    chart.setGenResult(genResult);
+                                    chart.setUserId(userId);
+
+
+                                    boolean saveResult = this.updateById(chart);
+                                    if (!saveResult) {
+                                        log.error("数据库插入错误！");
+                                        handleSseError(baseResponse, "数据库插入错误！", taskId);
+                                        throw new BusinessException("数据库插入错误！");
+                                    }
+                                    log.info("数据保存成功...");
+
+                                    User user = userService.getById(userId2);
+                                    if (user == null) {
+                                        handleSseError(baseResponse, "用户不存在！", taskId);
+                                        throw new BusinessException("用户不存在！");
+                                    }
+                                    if (user.getInvokeCount() < 1) {
+                                        handleSseError(baseResponse, "调用次数不足！", taskId);
+                                        throw new BusinessException("调用次数不足！");
+                                    }
+                                    user.setInvokeCount(user.getInvokeCount() - 1);
+                                    boolean b = userService.updateById(user);
+                                    if (!b) {
+                                        handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                        throw new BusinessException("数据库更新错误！");
+                                    }
+
+                                    //  修改图表状态
+                                    Chart updateChartResult = new Chart();
+                                    updateChartResult.setId(chartResult.getId());
+                                    updateChartResult.setGenChart(genChart);
+                                    updateChartResult.setGenResult(genResult);
+                                    updateChartResult.setStatus(ChartStatusEnum.SUCCEED.getStatus());
+                                    updateChartResult.setExecMessage(ChartStatusEnum.SUCCEED.getExecMessage());
+                                    boolean updateResult = this.updateById(updateChartResult);
+                                    if (!updateResult) {
+                                        log.error("数据库更新错误！");
+                                        handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                        throw new BusinessException("数据库更新错误！");
+                                    }
+                                    // 5. 完成任务（100%）
+                                    log.info("任务完成...");
+                                    biResponse.setChartId(chartResult.getId());
+                                    biResponse.setGenChart(genChart);
+                                    biResponse.setGenResult(genResult);
+                                    handleSseSend(biResponse, "任务完成...", 100, baseResponse);
+
+
+                                } catch (Exception e) {
+                                    try {
+                                        Chart chart = new Chart();
+                                        handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                                    } catch (BusinessException ex) {
+                                        log.error("数据库更新错误！");
+                                        ex.printStackTrace();
+                                        handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                        throw new BusinessException("数据库更新错误");
+                                    }
+                                    // 发送错误信息
+                                    e.printStackTrace();
+                                    handleSseError(baseResponse, "任务执行错误！", taskId);
+                                    throw new BusinessException("任务执行错误！");
+                                } finally {
+                                    // 确保连接关闭
+                                    sseEmitterManager.removeEmitter(taskId);
+                                }
+                            }, threadPoolExecutor);
+                        } catch (TeaUnretryableException e) {
+                            // 记录日志但不直接抛出业务异常
+                            log.error("文件审核服务调用失败，可能是网络问题", e);
+                            // 可以选择跳过审核或使用默认处理
+                            throw new BusinessException("文件审核服务暂时不可用，请稍后重试");
+                        } catch (Exception e) {
+                            if (e instanceof RejectedExecutionException) {
+                                Chart chart = new Chart();
+                                chart.setId(chartResult.getId());
+                                chart.setStatus(ChartStatusEnum.WAIT.getStatus());
+                                chart.setExecMessage("当前任务繁忙，稍后将为你重试");
+                                boolean updateResult = this.updateById(chart);
+                                if (!updateResult) {
+                                    log.error("数据库更新错误！");
+                                    handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                    throw new BusinessException("数据库更新错误！");
+                                }
+                                throw e;
+                            }
+                            try {
+                                Chart chart = new Chart();
+                                handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                            } catch (BusinessException ex) {
+                                log.error("数据库更新错误！");
+                                ex.printStackTrace();
+                                handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                throw new BusinessException("数据库更新错误");
+                            }
+                            log.error("异步任务执行错误！", e);
+                            handleSseError(baseResponse, "任务执行错误！", taskId);
+                            throw new BusinessException("任务执行错误!!!");
+                        }
+                        return true;
+                    });
+                } catch (ExecutionException | RetryException e) {
+                    log.error("当前系统繁忙，请稍后再试！", e);
                     Chart chart = new Chart();
-                    chart.setId(chartResult.getId());
-                    chart.setName(name);
-                    chart.setGoal(goal);
-                    chart.setChartData(CsvData);
-                    chart.setChartType(chartType);
-                    chart.setGenChart(genChart);
-                    chart.setGenResult(genResult);
-                    chart.setUserId(userId);
-
-
-                    boolean saveResult = this.updateById(chart);
-                    if (!saveResult) {
-                        log.error("数据库插入错误！");
-                        handleSseError(baseResponse, "数据库插入错误！", taskId);
-                        throw new BusinessException("数据库插入错误！");
-                    }
-                    log.info("数据保存成功...");
-
-                    User user = userService.getById(userId2);
-                    if (user == null) {
-                        handleSseError(baseResponse, "用户不存在！", taskId);
-                        throw new BusinessException("用户不存在！");
-                    }
-                    if (user.getInvokeCount() < 1) {
-                        handleSseError(baseResponse, "调用次数不足！", taskId);
-                        throw new BusinessException("调用次数不足！");
-                    }
-                    user.setInvokeCount(user.getInvokeCount() - 1);
-                    boolean b = userService.updateById(user);
-                    if (!b) {
-                        handleSseError(baseResponse, "数据库更新错误！", taskId);
-                        throw new BusinessException("数据库更新错误！");
-                    }
-
-                    //  修改图表状态
-                    Chart updateChartResult = new Chart();
-                    updateChartResult.setId(chartResult.getId());
-                    updateChartResult.setGenChart(genChart);
-                    updateChartResult.setGenResult(genResult);
-                    updateChartResult.setStatus(ChartStatusEnum.SUCCEED.getStatus());
-                    updateChartResult.setExecMessage(ChartStatusEnum.SUCCEED.getExecMessage());
-                    boolean updateResult = this.updateById(updateChartResult);
-                    if (!updateResult) {
-                        log.error("数据库更新错误！");
-                        handleSseError(baseResponse, "数据库更新错误！", taskId);
-                        throw new BusinessException("数据库更新错误！");
-                    }
-                    // 5. 完成任务（100%）
-                    log.info("任务完成...");
-                    biResponse.setChartId(chartResult.getId());
-                    biResponse.setGenChart(genChart);
-                    biResponse.setGenResult(genResult);
-                    handleSseSend(biResponse, "任务完成...", 100, baseResponse);
-
-
-                } catch (Exception e) {
-                    try {
-                        Chart chart = new Chart();
-                        handleDatabase(e, chart, chartResult, baseResponse, taskId);
-                    } catch (BusinessException ex) {
-                        log.error("数据库更新错误！");
-                        ex.printStackTrace();
-                        handleSseError(baseResponse, "数据库更新错误！", taskId);
-                        throw new BusinessException("数据库更新错误");
-                    }
-                    // 发送错误信息
-                    e.printStackTrace();
-                    handleSseError(baseResponse, "任务执行错误！", taskId);
-                    throw new BusinessException("任务执行错误！");
-                } finally {
-                    // 确保连接关闭
-                    sseEmitterManager.removeEmitter(taskId);
+                    handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                    throw new BusinessException("当前系统繁忙，请稍后再试！");
                 }
-            }, threadPoolExecutor);
-        } catch (TeaUnretryableException e) {
-            // 记录日志但不直接抛出业务异常
-            log.error("文件审核服务调用失败，可能是网络问题", e);
-            // 可以选择跳过审核或使用默认处理
-            throw new BusinessException("文件审核服务暂时不可用，请稍后重试");
+            }, threadPoolExecutorRetry);
+        } catch (Exception e) {
+            log.error("当前系统繁忙，请稍后再试！", e);
+            Chart chart = new Chart();
+            handleDatabase(e, chart, chartResult, baseResponse, taskId);
+            throw new BusinessException("当前系统繁忙，请稍后再试");
         }
-        catch (Exception e) {
-            if (e instanceof RejectedExecutionException) {
-                Chart chart = new Chart();
-                chart.setId(chartResult.getId());
-                chart.setStatus(ChartStatusEnum.WAIT.getStatus());
-                chart.setExecMessage("当前任务繁忙，售后将为你重试");
-                boolean updateResult = this.updateById(chart);
-                if (!updateResult) {
-                    log.error("数据库更新错误！");
-                    handleSseError(baseResponse, "数据库更新错误！", taskId);
-                    throw new BusinessException("数据库更新错误！");
-                }
-                try {
-                    throw e;
-                } catch (IOException ex) {
-                    throw new RejectedExecutionException(ex);
-                }
-            }
-            try {
-                Chart chart = new Chart();
-                handleDatabase(e, chart, chartResult, baseResponse, taskId);
-            } catch (BusinessException ex) {
-                log.error("数据库更新错误！");
-                ex.printStackTrace();
-                handleSseError(baseResponse, "数据库更新错误！", taskId);
-                throw new BusinessException("数据库更新错误");
-            }
-            log.error("异步任务执行错误！", e);
-            handleSseError(baseResponse, "任务执行错误！", taskId);
-            throw new BusinessException("任务执行错误!!!");
-        }
+
 
         biResponse.setTaskId(taskId);
         biResponse.setChartId(chartResult.getId());
@@ -382,7 +409,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         chart.setStatus(ChartStatusEnum.FAILED.getStatus());
         if (e == null) {
             chart.setStatus(ChartStatusEnum.FAILED.getStatus());
-        }else {
+        } else {
             chart.setExecMessage(ChartStatusEnum.FAILED.getExecMessage() + ":" + e.getMessage());
         }
         boolean updateResult = this.updateById(chart);
@@ -655,7 +682,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     }
 
     private void handleSseError(BaseResponse<BiResponse> baseResponse, String goal, String taskId) {
-        log.error("sse执行错误！！！:"+ goal);
+        log.error("sse执行错误！！！:" + goal);
         baseResponse.setMessage(goal);
         baseResponse.setCode(500);
         sseEmitterManager.sendProgress(baseResponse);
