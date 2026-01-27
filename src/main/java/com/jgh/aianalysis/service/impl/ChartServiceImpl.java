@@ -91,11 +91,11 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     @Override
     public BaseResponse<BiResponse> genChartByAi(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
 
-        int size1 = threadPoolExecutor.getQueue().size();
-//        if (size1 == 1) {
-//            log.error("当前系统繁忙，请稍后再试！");
-//            throw new BusinessException("当前系统繁忙，请稍后再试！");
-//        }
+        int size1 = threadPoolExecutorRetry.getActiveCount();
+        if (size1 == 5) {
+            log.error("当前系统繁忙，请稍后再试！");
+            throw new BusinessException("当前系统繁忙，请稍后再试！");
+        }
 
         String name = genChartByAiRequest.getName();
         String goal = genChartByAiRequest.getGoal();
