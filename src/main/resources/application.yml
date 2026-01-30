@@ -1,5 +1,18 @@
 # DataSource Config
 spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+  rabbitmq:
+    port: 5672
+    host: localhost
+    username: guest
+    password: guest
+    listener:
+      simple:
+        prefetch: 2 # 设置qos最大缓存数，预接受10个消息到缓存中
+        concurrency: 2 # 处理线程数，可以理解为同一时间处理多少个消息
+        max-concurrency: 4
   mail:
     # 发送者邮箱
     username: 2708637848@qq.com

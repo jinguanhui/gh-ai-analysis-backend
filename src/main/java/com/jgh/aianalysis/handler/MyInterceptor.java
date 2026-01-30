@@ -58,7 +58,9 @@ public class MyInterceptor implements HandlerInterceptor {
 //            throw new BusinessException("检测到违法路径！！！");
 //        }
 
-        if (request.getServletPath().equals("/chart/gen")) {
+        if (request.getServletPath().equals("/chart/gen") ||
+                request.getServletPath().equals("/chart/gen/mq") ||
+                request.getServletPath().equals("/chart/gen/sync")) {
             Long userId = Long.valueOf(request.getHeader("userId"));
             if (userId == null) {
                 log.error("未知用户");

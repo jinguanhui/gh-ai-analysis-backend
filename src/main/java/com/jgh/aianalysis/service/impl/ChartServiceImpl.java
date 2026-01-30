@@ -1,5 +1,6 @@
 package com.jgh.aianalysis.service.impl;
 
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONUtil;
 import com.aliyun.tea.TeaUnretryableException;
@@ -10,6 +11,8 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.manager.ai.AIManager;
 import com.jgh.aianalysis.mapper.ChartMapper;
+import com.jgh.aianalysis.mapper.GhFileMapper;
+import com.jgh.aianalysis.mq.MyMessageProducer;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
@@ -19,6 +22,7 @@ import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ChartStatusEnum;
 import com.jgh.ghcommon.model.dto.chart.GenChartByAiRequest;
 import com.jgh.ghcommon.model.entity.Chart;
+import com.jgh.ghcommon.model.entity.GhFile;
 import com.jgh.ghcommon.model.entity.User;
 import com.jgh.ghcommon.model.vo.BiResponse;
 import jakarta.annotation.Resource;
@@ -32,14 +36,14 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
+
+import static com.jgh.ghcommon.constant.CommonConstant.EXCHANGE_NAME;
+import static com.jgh.ghcommon.constant.CommonConstant.ROUTING_KEY;
 
 /**
  * @author jgh
@@ -73,6 +77,12 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     @Resource
     private Retryer<Boolean> retryer;
 
+    @Resource
+    private MyMessageProducer myMessageProducer;
+
+    @Resource
+    private GhFileMapper ghFileMapper;
+
     //  文件大小最多为1MB
     private final long MAX_FILE_SIZE = 1024 * 1024;
 
@@ -83,13 +93,14 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
     /**
      * 生成图表
      *
-     * @param multipartFile
      * @param genChartByAiRequest
      * @param request
      * @return
      */
     @Override
-    public BaseResponse<BiResponse> genChartByAi(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
+    public BaseResponse<BiResponse> genChartByAi(byte[] fileBytes1,String originalFilename,
+                                                 GenChartByAiRequest genChartByAiRequest,
+                                                 HttpServletRequest request) {
 
         int size1 = threadPoolExecutorRetry.getActiveCount();
         if (size1 == 5) {
@@ -101,25 +112,9 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         String goal = genChartByAiRequest.getGoal();
         String chartType = genChartByAiRequest.getChartType();
 
-        //  校验文件大小、后缀、内容合规性（阿里云OSS对象存储的审核功能）
-        String originalFilename = multipartFile.getOriginalFilename();
-        long size = multipartFile.getSize();
-
-        if (size > MAX_FILE_SIZE) {
-            throw new BusinessException("文件超过1MB！");
-        }
-
-        String suffix = FileUtil.getSuffix(originalFilename);
-
-        if (!SUFFIX_ARRAY.contains(suffix)) {
-            throw new BusinessException("文件格式错误！");
-        }
-
-
         // 创建SseEmitter，设置较长的超时时间
         BiResponse biResponse = new BiResponse();
         BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
-
 
         // 1. 生成唯一taskId
         String taskId = UUID.randomUUID().toString().substring(0, 8);
@@ -148,8 +143,8 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
         //  异步提交任务
         try {
             // 立即复制文件到安全位置
-            byte[] fileBytes = multipartFile.getBytes();
-            String originalFilename1 = multipartFile.getOriginalFilename();
+            byte[] fileBytes = fileBytes1;
+            String originalFilename1 = originalFilename;
             if (originalFilename1 == null) {
                 log.error("没有文件名！");
                 handleSseError(baseResponse, "没有文件名！", taskId);
@@ -219,6 +214,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                         fileURL = aliyunOSSUtil.getFileURL(inputStream, originalFilename1, "file");
                                     } catch (IOException e) {
                                         log.error("上传文件失败！", e);
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileExcel(fileBytes);
+                                        ghFile.setFileName(originalFilename1);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
                                         handleSseError(baseResponse, "上传文件失败！！！", taskId);
                                         e.printStackTrace();
                                         throw new BusinessException("上传文件失败！！！");
@@ -226,6 +233,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                                     if (fileURL == null) {
                                         log.error("上传文件失败！");
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileName(originalFilename1);
+                                        ghFile.setFileExcel(fileBytes);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
                                         handleSseError(baseResponse, "上传文件失败！！！", taskId);
                                         throw new BusinessException("上传文件失败！！！");
                                     }
@@ -259,6 +278,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                     String result = aIManager.doChat(goal, CsvData, chartType);
                                     String[] splits = result.split("【【【【【");
                                     if (splits.length < 3) {
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileName(originalFilename1);
+                                        ghFile.setFileExcel(fileBytes);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
                                         handleSseError(baseResponse, "AI生成错误！", taskId);
                                         throw new BusinessException("AI生成错误！");
                                     }
@@ -291,10 +322,34 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
                                     User user = userService.getById(userId2);
                                     if (user == null) {
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileExcel(fileBytes);
+                                        ghFile.setFileName(originalFilename1);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
                                         handleSseError(baseResponse, "用户不存在！", taskId);
                                         throw new BusinessException("用户不存在！");
                                     }
                                     if (user.getInvokeCount() < 1) {
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileExcel(fileBytes);
+                                        ghFile.setFileName(originalFilename1);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
                                         handleSseError(baseResponse, "调用次数不足！", taskId);
                                         throw new BusinessException("调用次数不足！");
                                     }
@@ -337,6 +392,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                         throw new BusinessException("数据库更新错误");
                                     }
                                     // 发送错误信息
+                                    GhFile ghFile = new GhFile();
+
+                                    ghFile.setChartId(chartResult.getId());
+                                    ghFile.setFileExcel(fileBytes);
+                                    ghFile.setFileName(originalFilename1);
+
+                                    int insert = ghFileMapper.insert(ghFile);
+                                    if (insert <= 0) {
+                                        log.error("插入文件失败！");
+                                        handleSseError(baseResponse, "插入文件失败！", taskId);
+                                        throw new BusinessException("插入文件失败！");
+                                    }
                                     e.printStackTrace();
                                     handleSseError(baseResponse, "任务执行错误！", taskId);
                                     throw new BusinessException("任务执行错误！");
@@ -348,6 +415,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                         } catch (TeaUnretryableException e) {
                             // 记录日志但不直接抛出业务异常
                             log.error("文件审核服务调用失败，可能是网络问题", e);
+                            GhFile ghFile = new GhFile();
+
+                            ghFile.setChartId(chartResult.getId());
+                            ghFile.setFileExcel(fileBytes);
+                            ghFile.setFileName(originalFilename1);
+
+                            int insert = ghFileMapper.insert(ghFile);
+                            if (insert <= 0) {
+                                log.error("插入文件失败！");
+                                handleSseError(baseResponse, "插入文件失败！", taskId);
+                                throw new BusinessException("插入文件失败！");
+                            }
                             // 可以选择跳过审核或使用默认处理
                             throw new BusinessException("文件审核服务暂时不可用，请稍后重试");
                         } catch (Exception e) {
@@ -362,6 +441,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                     handleSseError(baseResponse, "数据库更新错误！", taskId);
                                     throw new BusinessException("数据库更新错误！");
                                 }
+                                GhFile ghFile = new GhFile();
+
+                                ghFile.setChartId(chartResult.getId());
+                                ghFile.setFileExcel(fileBytes);
+                                ghFile.setFileName(originalFilename1);
+
+                                int insert = ghFileMapper.insert(ghFile);
+                                if (insert <= 0) {
+                                    log.error("插入文件失败！");
+                                    handleSseError(baseResponse, "插入文件失败！", taskId);
+                                    throw new BusinessException("插入文件失败！");
+                                }
                                 throw e;
                             }
                             try {
@@ -373,6 +464,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                 handleSseError(baseResponse, "数据库更新错误！", taskId);
                                 throw new BusinessException("数据库更新错误");
                             }
+                            GhFile ghFile = new GhFile();
+
+                            ghFile.setChartId(chartResult.getId());
+                            ghFile.setFileExcel(fileBytes);
+                            ghFile.setFileName(originalFilename1);
+
+                            int insert = ghFileMapper.insert(ghFile);
+                            if (insert <= 0) {
+                                log.error("插入文件失败！");
+                                handleSseError(baseResponse, "插入文件失败！", taskId);
+                                throw new BusinessException("插入文件失败！");
+                            }
                             log.error("异步任务执行错误！", e);
                             handleSseError(baseResponse, "任务执行错误！", taskId);
                             throw new BusinessException("任务执行错误!!!");
@@ -383,6 +486,18 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                     log.error("当前系统繁忙，请稍后再试！", e);
                     Chart chart = new Chart();
                     handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                    GhFile ghFile = new GhFile();
+
+                    ghFile.setChartId(chartResult.getId());
+                    ghFile.setFileExcel(fileBytes);
+                    ghFile.setFileName(originalFilename1);
+
+                    int insert = ghFileMapper.insert(ghFile);
+                    if (insert <= 0) {
+                        log.error("插入文件失败！");
+                        handleSseError(baseResponse, "插入文件失败！", taskId);
+                        throw new BusinessException("插入文件失败！");
+                    }
                     throw new BusinessException("当前系统繁忙，请稍后再试！");
                 }
             }, threadPoolExecutorRetry);
@@ -392,6 +507,530 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
             handleDatabase(e, chart, chartResult, baseResponse, taskId);
             throw new BusinessException("当前系统繁忙，请稍后再试");
         }
+
+
+        biResponse.setTaskId(taskId);
+        biResponse.setChartId(chartResult.getId());
+
+        baseResponse.setData(biResponse);
+        baseResponse.setCode(200);
+        baseResponse.setMessage("任务提交成功！");
+
+        return baseResponse;
+    }
+
+    /**
+     * 生成图表
+     *
+     * @param genChartByAiRequest
+     * @param request
+     * @return
+     */
+    @Override
+    public BaseResponse<BiResponse> reGenChartByAi(byte[] fileBytes1, String originalFilename,
+                                                   GenChartByAiRequest genChartByAiRequest,
+                                                   Long id,
+                                                   HttpServletRequest request) {
+
+        int size1 = threadPoolExecutorRetry.getActiveCount();
+        if (size1 == 5) {
+            log.error("当前系统繁忙，请稍后再试！");
+            throw new BusinessException("当前系统繁忙，请稍后再试！");
+        }
+
+        String name = genChartByAiRequest.getName();
+        String goal = genChartByAiRequest.getGoal();
+        String chartType = genChartByAiRequest.getChartType();
+
+        // 创建SseEmitter，设置较长的超时时间
+        BiResponse biResponse = new BiResponse();
+        BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
+
+        // 1. 生成唯一taskId
+        String taskId = UUID.randomUUID().toString().substring(0, 8);
+
+        sseEmitterManager.createEmitter(taskId);
+        log.info(request.getHeader("userId"));
+        Long userId = Long.valueOf(request.getHeader("userId"));
+
+        Chart chartResult = new Chart();
+        chartResult.setId(id);
+        chartResult.setStatus(ChartStatusEnum.WAIT.getStatus());
+        chartResult.setExecMessage(ChartStatusEnum.WAIT.getExecMessage());
+        chartResult.setCreateTime(new Date());
+
+        boolean save = updateById(chartResult);
+        if (!save) {
+            log.error("图表保存失败！");
+            throw new BusinessException("图表保存失败！");
+        }
+
+        biResponse.setChartId(chartResult.getId());
+
+
+        //  异步提交任务
+        try {
+            // 立即复制文件到安全位置
+            byte[] fileBytes = fileBytes1;
+            String originalFilename1 = originalFilename;
+            if (originalFilename1 == null) {
+                log.error("没有文件名！");
+                handleSseError(baseResponse, "没有文件名！", taskId);
+                throw new BusinessException("没有文件名！");
+            }
+            CompletableFuture.runAsync(()-> {
+                try {
+                    retryer.call(() -> {
+                        // 启动异步任务进行图表生成
+                        try {
+                            CompletableFuture.runAsync(() -> {
+                                try {
+
+                                    // 创建一个HashMap存储线程池的状态信息
+                                    Map<String, Object> threadMap = new HashMap<>();
+                                    // 获取线程池的队列长度
+                                    int sizeQueue = threadPoolExecutor.getQueue().size();
+                                    // 将队列长度放入map中
+                                    threadMap.put("队列长度", sizeQueue);
+                                    // 获取线程池已接收的任务总数
+                                    long taskCount = threadPoolExecutor.getTaskCount();
+                                    // 将任务总数放入map中
+                                    threadMap.put("任务总数", taskCount);
+                                    // 获取线程池已完成的任务数
+                                    long completedTaskCount = threadPoolExecutor.getCompletedTaskCount();
+                                    // 将已完成的任务数放入map中
+                                    threadMap.put("已完成任务数", completedTaskCount);
+                                    // 获取线程池中正在执行任务的线程数
+                                    int activeCount = threadPoolExecutor.getActiveCount();
+                                    // 将正在工作的线程数放入map中
+                                    threadMap.put("正在工作的线程数", activeCount);
+                                    // 将map转换为JSON字符串并返回
+                                    log.info("线程池状态" + JSONUtil.toJsonStr(threadMap));
+                                    Chart updateChart = new Chart();
+                                    updateChart.setId(chartResult.getId());
+                                    updateChart.setStatus(ChartStatusEnum.RUNNING.getStatus());
+                                    updateChart.setExecMessage(ChartStatusEnum.RUNNING.getExecMessage());
+                                    boolean b1 = updateById(updateChart);
+                                    if (!b1) {
+                                        log.error("图表更新失败！");
+                                        handleSseError(baseResponse, "图表更新失败！", taskId);
+                                        throw new BusinessException("图表更新失败！");
+                                    }
+
+                                    Long userId2 = userId;
+                                    // 1. 验证参数（10%）
+                                    log.info("开始处理参数...");
+                                    biResponse.setTaskId(taskId);
+                                    handleSseSend(biResponse, "正在处理参数...", 10, baseResponse);
+                                    if (StringUtils.isBlank(goal)) {
+                                        handleSseError(baseResponse, "请输入分析目标", taskId);
+                                        throw new BusinessException("请输入分析目标");
+                                    }
+                                    if (StringUtils.isBlank(name)) {
+                                        handleSseError(baseResponse, "请输入分析表的名称", taskId);
+                                        throw new BusinessException("请输入分析表的名称");
+                                    }
+                                    if (StringUtils.isNotBlank(name) && name.length() > 100) {
+                                        handleSseError(baseResponse, "名称过长", taskId);
+                                        throw new BusinessException("名称过长");
+                                    }
+                                    //  将文档上传到OSS
+                                    String fileURL = null;
+                                    try {
+                                        // 使用预读取的文件字节数组创建输入流上传到OSS
+                                        ByteArrayInputStream inputStream = new ByteArrayInputStream(fileBytes);
+                                        fileURL = aliyunOSSUtil.getFileURL(inputStream, originalFilename1, "file");
+                                    } catch (IOException e) {
+                                        log.error("上传文件失败！", e);
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileExcel(fileBytes);
+                                        ghFile.setFileName(originalFilename1);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
+                                        handleSseError(baseResponse, "上传文件失败！！！", taskId);
+                                        e.printStackTrace();
+                                        throw new BusinessException("上传文件失败！！！");
+                                    }
+
+                                    if (fileURL == null) {
+                                        log.error("上传文件失败！");
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileName(originalFilename1);
+                                        ghFile.setFileExcel(fileBytes);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
+                                        handleSseError(baseResponse, "上传文件失败！！！", taskId);
+                                        throw new BusinessException("上传文件失败！！！");
+                                    }
+
+                                    //  对文档检测
+                                    Map map = null;
+                                    try {
+                                        map = fileGreenUtil.fileGreenCheck(fileURL, "file");
+                                    } catch (Exception e) {
+                                        log.error("文件存在不合规内容！！！");
+                                        handleSseError(baseResponse, "文件存在不合规内容！！！", taskId);
+                                        throw new BusinessException("文件存在不合规内容！！！");
+                                    }
+
+                                    if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
+                                        log.error("文件检测失败！！！内容不合规");
+                                        handleSseError(baseResponse, "文件检测失败！！！内容不合规", taskId);
+                                        throw new BusinessException("文件检测失败！！！内容不合规");
+                                    }
+
+                                    // 2. 文件处理（30%）
+                                    log.info("开始处理Excel文件...");
+                                    handleSseSend(biResponse, "正在处理Excel文件...", 30, baseResponse);
+
+                                    String CsvData = ExcelUtils.excelToCsvFromBytes(fileBytes);
+
+                                    // 3. AI分析（60%）
+                                    log.info("开始进行AI分析...");
+                                    handleSseSend(biResponse, "正在进行AI分析...", 60, baseResponse);
+
+                                    String result = aIManager.doChat(goal, CsvData, chartType);
+                                    String[] splits = result.split("【【【【【");
+                                    if (splits.length < 3) {
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileName(originalFilename1);
+                                        ghFile.setFileExcel(fileBytes);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
+                                        handleSseError(baseResponse, "AI生成错误！", taskId);
+                                        throw new BusinessException("AI生成错误！");
+                                    }
+
+
+                                    // 4. 保存数据（80%）
+                                    log.info("正在保存数据...");
+                                    handleSseSend(biResponse, "正在保存数据...", 80, baseResponse);
+                                    String genChart = splits[1].trim();
+                                    String genResult = splits[2].trim();
+
+                                    Chart chart = new Chart();
+                                    chart.setId(chartResult.getId());
+                                    chart.setName(name);
+                                    chart.setGoal(goal);
+                                    chart.setChartData(CsvData);
+                                    chart.setChartType(chartType);
+                                    chart.setGenChart(genChart);
+                                    chart.setGenResult(genResult);
+                                    chart.setUserId(userId);
+
+
+                                    boolean saveResult = this.updateById(chart);
+                                    if (!saveResult) {
+                                        log.error("数据库插入错误！");
+                                        handleSseError(baseResponse, "数据库插入错误！", taskId);
+                                        throw new BusinessException("数据库插入错误！");
+                                    }
+                                    log.info("数据保存成功...");
+
+                                    User user = userService.getById(userId2);
+                                    if (user == null) {
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileExcel(fileBytes);
+                                        ghFile.setFileName(originalFilename1);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
+                                        handleSseError(baseResponse, "用户不存在！", taskId);
+                                        throw new BusinessException("用户不存在！");
+                                    }
+                                    if (user.getInvokeCount() < 1) {
+                                        GhFile ghFile = new GhFile();
+
+                                        ghFile.setChartId(chartResult.getId());
+                                        ghFile.setFileExcel(fileBytes);
+                                        ghFile.setFileName(originalFilename1);
+
+                                        int insert = ghFileMapper.insert(ghFile);
+                                        if (insert <= 0) {
+                                            log.error("插入文件失败！");
+                                            handleSseError(baseResponse, "插入文件失败！", taskId);
+                                            throw new BusinessException("插入文件失败！");
+                                        }
+                                        handleSseError(baseResponse, "调用次数不足！", taskId);
+                                        throw new BusinessException("调用次数不足！");
+                                    }
+                                    user.setInvokeCount(user.getInvokeCount() - 1);
+                                    boolean b = userService.updateById(user);
+                                    if (!b) {
+                                        handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                        throw new BusinessException("数据库更新错误！");
+                                    }
+
+                                    //  修改图表状态
+                                    Chart updateChartResult = new Chart();
+                                    updateChartResult.setId(chartResult.getId());
+                                    updateChartResult.setGenChart(genChart);
+                                    updateChartResult.setGenResult(genResult);
+                                    updateChartResult.setStatus(ChartStatusEnum.SUCCEED.getStatus());
+                                    updateChartResult.setExecMessage(ChartStatusEnum.SUCCEED.getExecMessage());
+                                    boolean updateResult = this.updateById(updateChartResult);
+                                    if (!updateResult) {
+                                        log.error("数据库更新错误！");
+                                        handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                        throw new BusinessException("数据库更新错误！");
+                                    }
+                                    // 5. 完成任务（100%）
+                                    log.info("任务完成...");
+                                    biResponse.setChartId(chartResult.getId());
+                                    biResponse.setGenChart(genChart);
+                                    biResponse.setGenResult(genResult);
+                                    handleSseSend(biResponse, "任务完成...", 100, baseResponse);
+
+
+                                } catch (Exception e) {
+                                    try {
+                                        Chart chart = new Chart();
+                                        handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                                    } catch (BusinessException ex) {
+                                        log.error("数据库更新错误！");
+                                        ex.printStackTrace();
+                                        handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                        throw new BusinessException("数据库更新错误");
+                                    }
+                                    // 发送错误信息
+                                    GhFile ghFile = new GhFile();
+
+                                    ghFile.setChartId(chartResult.getId());
+                                    ghFile.setFileExcel(fileBytes);
+                                    ghFile.setFileName(originalFilename1);
+
+                                    int insert = ghFileMapper.insert(ghFile);
+                                    if (insert <= 0) {
+                                        log.error("插入文件失败！");
+                                        handleSseError(baseResponse, "插入文件失败！", taskId);
+                                        throw new BusinessException("插入文件失败！");
+                                    }
+                                    e.printStackTrace();
+                                    handleSseError(baseResponse, "任务执行错误！", taskId);
+                                    throw new BusinessException("任务执行错误！");
+                                } finally {
+                                    // 确保连接关闭
+                                    sseEmitterManager.removeEmitter(taskId);
+                                }
+                            }, threadPoolExecutor);
+                        } catch (TeaUnretryableException e) {
+                            // 记录日志但不直接抛出业务异常
+                            log.error("文件审核服务调用失败，可能是网络问题", e);
+                            GhFile ghFile = new GhFile();
+
+                            ghFile.setChartId(chartResult.getId());
+                            ghFile.setFileExcel(fileBytes);
+                            ghFile.setFileName(originalFilename1);
+
+                            int insert = ghFileMapper.insert(ghFile);
+                            if (insert <= 0) {
+                                log.error("插入文件失败！");
+                                handleSseError(baseResponse, "插入文件失败！", taskId);
+                                throw new BusinessException("插入文件失败！");
+                            }
+                            // 可以选择跳过审核或使用默认处理
+                            throw new BusinessException("文件审核服务暂时不可用，请稍后重试");
+                        } catch (Exception e) {
+                            if (e instanceof RejectedExecutionException) {
+                                Chart chart = new Chart();
+                                chart.setId(chartResult.getId());
+                                chart.setStatus(ChartStatusEnum.WAIT.getStatus());
+                                chart.setExecMessage("当前任务繁忙，稍后将为你重试");
+                                boolean updateResult = this.updateById(chart);
+                                if (!updateResult) {
+                                    log.error("数据库更新错误！");
+                                    handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                    throw new BusinessException("数据库更新错误！");
+                                }
+                                GhFile ghFile = new GhFile();
+
+                                ghFile.setChartId(chartResult.getId());
+                                ghFile.setFileExcel(fileBytes);
+                                ghFile.setFileName(originalFilename1);
+
+                                int insert = ghFileMapper.insert(ghFile);
+                                if (insert <= 0) {
+                                    log.error("插入文件失败！");
+                                    handleSseError(baseResponse, "插入文件失败！", taskId);
+                                    throw new BusinessException("插入文件失败！");
+                                }
+                                throw e;
+                            }
+                            try {
+                                Chart chart = new Chart();
+                                handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                            } catch (BusinessException ex) {
+                                log.error("数据库更新错误！");
+                                ex.printStackTrace();
+                                handleSseError(baseResponse, "数据库更新错误！", taskId);
+                                throw new BusinessException("数据库更新错误");
+                            }
+                            GhFile ghFile = new GhFile();
+
+                            ghFile.setChartId(chartResult.getId());
+                            ghFile.setFileExcel(fileBytes);
+                            ghFile.setFileName(originalFilename1);
+
+                            int insert = ghFileMapper.insert(ghFile);
+                            if (insert <= 0) {
+                                log.error("插入文件失败！");
+                                handleSseError(baseResponse, "插入文件失败！", taskId);
+                                throw new BusinessException("插入文件失败！");
+                            }
+                            log.error("异步任务执行错误！", e);
+                            handleSseError(baseResponse, "任务执行错误！", taskId);
+                            throw new BusinessException("任务执行错误!!!");
+                        }
+                        return true;
+                    });
+                } catch (ExecutionException | RetryException e) {
+                    log.error("当前系统繁忙，请稍后再试！", e);
+                    Chart chart = new Chart();
+                    handleDatabase(e, chart, chartResult, baseResponse, taskId);
+                    GhFile ghFile = new GhFile();
+
+                    ghFile.setChartId(chartResult.getId());
+                    ghFile.setFileExcel(fileBytes);
+                    ghFile.setFileName(originalFilename1);
+
+                    int insert = ghFileMapper.insert(ghFile);
+                    if (insert <= 0) {
+                        log.error("插入文件失败！");
+                        handleSseError(baseResponse, "插入文件失败！", taskId);
+                        throw new BusinessException("插入文件失败！");
+                    }
+                    throw new BusinessException("当前系统繁忙，请稍后再试！");
+                }
+            }, threadPoolExecutorRetry);
+        } catch (Exception e) {
+            log.error("当前系统繁忙，请稍后再试！", e);
+            Chart chart = new Chart();
+            handleDatabase(e, chart, chartResult, baseResponse, taskId);
+            throw new BusinessException("当前系统繁忙，请稍后再试");
+        }
+
+
+        biResponse.setTaskId(taskId);
+        biResponse.setChartId(chartResult.getId());
+
+        baseResponse.setData(biResponse);
+        baseResponse.setCode(200);
+        baseResponse.setMessage("任务提交成功！");
+
+        return baseResponse;
+    }
+
+    /**
+     * 生成图表
+     *
+     * @param multipartFile
+     * @param genChartByAiRequest
+     * @param request
+     * @return
+     */
+    @Override
+    public BaseResponse<BiResponse> genChartByAiAndMq(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request) {
+
+        int size1 = threadPoolExecutorRetry.getActiveCount();
+        if (size1 == 5) {
+            log.error("当前系统繁忙，请稍后再试！");
+            throw new BusinessException("当前系统繁忙，请稍后再试！");
+        }
+
+        String name = genChartByAiRequest.getName();
+        String goal = genChartByAiRequest.getGoal();
+        String chartType = genChartByAiRequest.getChartType();
+
+        //  校验文件大小、后缀、内容合规性（阿里云OSS对象存储的审核功能）
+        String originalFilename = multipartFile.getOriginalFilename();
+        long size = multipartFile.getSize();
+
+        if (originalFilename == null) {
+            log.error("没有文件名！");
+            throw new BusinessException("没有文件名！");
+        }
+
+        if (size > MAX_FILE_SIZE) {
+            throw new BusinessException("文件超过1MB！");
+        }
+
+        String suffix = FileUtil.getSuffix(originalFilename);
+
+        if (!SUFFIX_ARRAY.contains(suffix)) {
+            throw new BusinessException("文件格式错误！");
+        }
+
+
+        // 创建SseEmitter，设置较长的超时时间
+        BiResponse biResponse = new BiResponse();
+        BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
+
+
+        // 1. 生成唯一taskId
+        String taskId = UUID.randomUUID().toString().substring(0, 8);
+
+        sseEmitterManager.createEmitter(taskId);
+        log.info(request.getHeader("userId"));
+        Long userId = Long.valueOf(request.getHeader("userId"));
+
+        Chart chartResult = new Chart();
+        chartResult.setName(name);
+        chartResult.setGoal(goal);
+        chartResult.setChartType(chartType);
+        chartResult.setUserId(userId);
+        chartResult.setStatus(ChartStatusEnum.WAIT.getStatus());
+        chartResult.setExecMessage(ChartStatusEnum.WAIT.getExecMessage());
+
+        boolean save = save(chartResult);
+        if (!save) {
+            log.error("图表保存失败！");
+            throw new BusinessException("图表保存失败！");
+        }
+
+        //  消息队列提交任务
+        // 立即复制文件到安全位置
+        byte[] fileBytes = null;
+        try {
+            fileBytes = multipartFile.getBytes();
+        } catch (IOException e) {
+            log.error("获取字节数组失败！！！，文件名：{}", originalFilename);
+            e.printStackTrace();
+            throw new BusinessException("获取字节数组失败！！！，文件名：" + originalFilename);
+        }
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("chartResultId", chartResult.getId().toString());
+        map.put("fileBytes", fileBytes);
+        map.put("originalFilename", originalFilename);
+        map.put("taskId", taskId);
+        myMessageProducer.sendMessage(EXCHANGE_NAME, ROUTING_KEY, map);
 
 
         biResponse.setTaskId(taskId);

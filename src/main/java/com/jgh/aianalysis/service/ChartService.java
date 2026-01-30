@@ -18,12 +18,31 @@ public interface ChartService extends IService<Chart> {
     /**
      * 生成图表
      *
+     * @param genChartByAiRequest
+     * @param request
+     * @return
+     */
+    BaseResponse<BiResponse> genChartByAi(byte[] fileBytes1,String originalFilename, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request);
+
+    /**
+     * 生成图表
+     *
+     * @param genChartByAiRequest
+     * @param request
+     * @return
+     */
+    BaseResponse<BiResponse> reGenChartByAi(byte[] fileBytes1,String originalFilename, GenChartByAiRequest genChartByAiRequest,Long id, HttpServletRequest request);
+
+    /**
+     * 生成图表
+     *
      * @param multipartFile
      * @param genChartByAiRequest
      * @param request
      * @return
      */
-    BaseResponse<BiResponse> genChartByAi(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request);
+    BaseResponse<BiResponse> genChartByAiAndMq(MultipartFile multipartFile, GenChartByAiRequest genChartByAiRequest, HttpServletRequest request);
+
 
     /**
      * 生成图表（同步）

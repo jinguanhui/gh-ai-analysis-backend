@@ -21,9 +21,11 @@ public class RetryConfig {
                 .retryIfResult(Objects::isNull)
                 .retryIfExceptionOfType(IOException.class)
                 .retryIfExceptionOfType(RejectedExecutionException.class)
-                .withStopStrategy(StopStrategies.stopAfterAttempt(5))
+//                .withStopStrategy(StopStrategies.stopAfterAttempt(5))
+                .withStopStrategy(StopStrategies.stopAfterAttempt(1))
                 //  递增重试，第一次为10，第二次为30，第三次为60--依次间隔10、20、30秒
-                .withWaitStrategy(WaitStrategies.fixedWait(20, TimeUnit.SECONDS))
+//                .withWaitStrategy(WaitStrategies.fixedWait(20, TimeUnit.SECONDS))
+                .withWaitStrategy(WaitStrategies.fixedWait(1, TimeUnit.SECONDS))
                 .withRetryListener(new MyRetryListener<>())
                 .withBlockStrategy(new SpinBlockStrategy())
                 .build();

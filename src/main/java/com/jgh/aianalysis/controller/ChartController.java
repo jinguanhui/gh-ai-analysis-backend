@@ -1,5 +1,6 @@
 package com.jgh.aianalysis.controller;
 
+import cn.hutool.core.io.FileUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.rholder.retry.RetryException;
@@ -8,17 +9,21 @@ import com.jgh.aianalysis.annotation.AuthCheck;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.service.ChartService;
+import com.jgh.aianalysis.service.GhFileService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ResponseCode;
 import com.jgh.ghcommon.constant.UserConstant;
 import com.jgh.ghcommon.model.dto.chart.*;
 import com.jgh.ghcommon.model.entity.Chart;
+import com.jgh.ghcommon.model.entity.GhFile;
 import com.jgh.ghcommon.model.vo.BiResponse;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,6 +56,9 @@ public class ChartController {
 
     @Resource
     private SseEmitterManager sseEmitterManager;
+
+    @Resource
+    private GhFileService ghFileService;
 
 
 
@@ -110,6 +118,50 @@ public class ChartController {
     }
 
     /**
+     * 主动重试原来的任务
+     *
+     * @param id
+     * @param request
+     * @return
+     */
+    @PostMapping("/re_gen")
+    public BaseResponse<BiResponse> reAnalysis(@RequestBody Long id, HttpServletRequest request) {
+        log.info("重试任务，图表ID：{}", id);
+        if (id == null) {
+            throw new BusinessException(ResponseCode.PARAM_NULL);
+        }
+
+        QueryWrapper<GhFile> wrapper = new QueryWrapper<>();
+        wrapper.eq("chartId",  id);
+
+        GhFile ghFile = ghFileService.getOne(wrapper);
+        if (ghFile == null) {
+            log.error("文件不存在！");
+            throw new BusinessException("文件不存在！");
+        }
+
+        Chart chartServiceById = chartService.getById(id);
+        String name = chartServiceById.getName();
+        String goal = chartServiceById.getGoal();
+        String chartType = chartServiceById.getChartType();
+
+        byte[] fileExcel = ghFile.getFileExcel();
+        String fileName = ghFile.getFileName();
+
+        GenChartByAiRequest genChartByAiRequest = new GenChartByAiRequest();
+        genChartByAiRequest.setName(name);
+        genChartByAiRequest.setGoal(goal);
+        genChartByAiRequest.setChartType(chartType);
+
+        return chartService.reGenChartByAi(fileExcel, fileName, genChartByAiRequest,id, request);
+    }
+
+    //  文件大小最多为1MB
+    private final long MAX_FILE_SIZE = 1024 * 1024;
+
+    //  合格的文件后缀
+    private static final List<String> SUFFIX_ARRAY = List.of("xlsx");
+    /**
      * 智能分析
      * @param multipartFile
      * @param request
@@ -146,7 +198,69 @@ public class ChartController {
         genChartByAiRequest.setGoal(goal);
         genChartByAiRequest.setChartType(chartType);
 
-        return chartService.genChartByAi(multipartFile, genChartByAiRequest, request);
+        //  校验文件大小、后缀、内容合规性（阿里云OSS对象存储的审核功能）
+        String originalFilename = multipartFile.getOriginalFilename();
+        byte[] bytes = null;
+        try {
+            bytes = multipartFile.getBytes();
+        } catch (IOException e) {
+            log.error("获取文件字节数组失败！！！", e);
+            throw new BusinessException("获取文件字节数组失败！！！");
+        }
+        long size = multipartFile.getSize();
+
+        if (size > MAX_FILE_SIZE) {
+            throw new BusinessException("文件超过1MB！");
+        }
+
+        String suffix = FileUtil.getSuffix(originalFilename);
+
+        if (!SUFFIX_ARRAY.contains(suffix)) {
+            throw new BusinessException("文件格式错误！");
+        }
+
+        return chartService.genChartByAi(bytes, originalFilename, genChartByAiRequest, request);
+    }
+
+    /**
+     * 智能分析
+     *
+     * @param multipartFile
+     * @param request
+     * @return
+     */
+    @PostMapping("/gen/mq")
+    public BaseResponse<BiResponse> genChartByAiAndMq(
+            @RequestParam("file") MultipartFile multipartFile,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        log.info("智能分析controller！");
+
+
+        /// 从RequestContextHolder获取当前请求，这应该是拦截器中设置的包装请求
+        org.springframework.web.context.request.RequestAttributes requestAttributes =
+                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+
+        HttpServletRequest currentRequest = null;
+        if (requestAttributes instanceof org.springframework.web.context.request.ServletRequestAttributes) {
+            currentRequest = ((org.springframework.web.context.request.ServletRequestAttributes) requestAttributes).getRequest();
+        }
+
+        String name = currentRequest.getParameter("name");
+        String goal = currentRequest.getParameter("goal");
+        String chartType = currentRequest.getParameter("chartType");
+
+        if (StringUtils.isAnyBlank(name, goal, chartType)) {
+            throw new BusinessException("参数为空");
+        }
+
+        GenChartByAiRequest genChartByAiRequest = new GenChartByAiRequest();
+        genChartByAiRequest.setName(name);
+        genChartByAiRequest.setGoal(goal);
+        genChartByAiRequest.setChartType(chartType);
+
+        return chartService.genChartByAiAndMq(multipartFile, genChartByAiRequest, request);
     }
 
     /**
