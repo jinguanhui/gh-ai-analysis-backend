@@ -1,9 +1,11 @@
 package com.jgh.aianalysis.mq;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.manager.ai.AIManager;
 import com.jgh.aianalysis.service.ChartService;
+import com.jgh.aianalysis.service.GhFileService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
 import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
@@ -11,6 +13,7 @@ import com.jgh.aianalysis.utils.aliyun.FileGreenUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ChartStatusEnum;
 import com.jgh.ghcommon.model.entity.Chart;
+import com.jgh.ghcommon.model.entity.GhFile;
 import com.jgh.ghcommon.model.entity.User;
 import com.jgh.ghcommon.model.vo.BiResponse;
 import com.rabbitmq.client.Channel;
@@ -34,6 +37,12 @@ import java.util.Map;
 @Slf4j
 public class MyDeadLetterConsumer {
 
+    @Resource
+    private ChartService chartService;
+
+    @Resource
+    private GhFileService ghFileService;
+
     /**
      * 接收消息的方法
      *
@@ -47,6 +56,37 @@ public class MyDeadLetterConsumer {
     // @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag是一个方法参数注解,用于从消息头中获取投递标签(deliveryTag),
     // 在RabbitMQ中,每条消息都会被分配一个唯一的投递标签，用于标识该消息在通道中的投递状态和顺序。通过使用@Header(AmqpHeaders.DELIVERY_TAG)注解,可以从消息头中提取出该投递标签,并将其赋值给long deliveryTag参数。
     public void receiveDeadMessage(Map message, Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+        log.info("死信队列开始工作，死信消息 = {}", message.toString());
+        Long chartResultId = Long.valueOf(message.get("chartResultId").toString());
 
+        UpdateWrapper<Chart> wrapper = new UpdateWrapper<>();
+        wrapper.eq("id", chartResultId);
+        wrapper.set("status", ChartStatusEnum.FAILED.getStatus());
+        wrapper.set("execMessage", ChartStatusEnum.FAILED.getExecMessage() + "当前系统繁忙，请稍后再试");
+
+        boolean update = chartService.update(wrapper);
+        if (!update) {
+            log.error("死信队列执行时，遇到图表不存在问题");
+            throw new BusinessException("图表不存在");
+        }
+
+        byte[] fileBytes = (byte[]) message.get("fileBytes");
+        String originalFilename = message.get("originalFilename").toString();
+
+        GhFile ghFile = new GhFile();
+        ghFile.setFileName(originalFilename);
+        ghFile.setFileExcel(fileBytes);
+        boolean save = ghFileService.save(ghFile);
+        if (!save) {
+            log.error("死信队列执行时，保存重试文件失败");
+            throw new BusinessException("保存重试文件失败");
+        }
+
+        try {
+            channel.basicAck(deliveryTag, false);
+        } catch (IOException e) {
+            log.error("MQ任务发送失败！！！", e);
+            throw new BusinessException("MQ任务发送失败！！！");
+        }
     }
 }

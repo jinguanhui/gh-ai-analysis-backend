@@ -31,10 +31,13 @@ public class MqInitMain {
 
             Map<String, Object> map = new HashMap<String, Object>();
             map.put("x-max-length", 1);
+            map.put("x-message-ttl", 30000);
             map.put("x-dead-letter-exchange", DEAD_LETTER_EXCHANGE_NAME);
+            map.put("x-dead-letter-routing-key", DEAD_LETTER_ROUTING_KEY);
 
             Map<String, Object> map1 = new HashMap<String, Object>();
-            map.put("x-max-length", 10);
+            map1.put("x-max-length", 10);
+            map1.put("x-message-ttl", 30000);
 
             // 创建队列，随机分配一个队列名称
             // 声明队列，设置队列持久化、非独占、非自动删除，并传入额外的参数为 null
@@ -42,7 +45,7 @@ public class MqInitMain {
             channel.queueDeclare(DEAD_LETTER_QUEUE_NAME, true, false, false, map1);
             // 将队列绑定到交换机，指定路由键为 "my_routingKey"
             channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, ROUTING_KEY);
-            channel.queueBind(DEAD_LETTER_EXCHANGE_NAME, DEAD_LETTER_QUEUE_NAME, DEAD_LETTER_ROUTING_KEY);
+            channel.queueBind(DEAD_LETTER_QUEUE_NAME, DEAD_LETTER_EXCHANGE_NAME, DEAD_LETTER_ROUTING_KEY);
         } catch (Exception e) {
             // 异常处理
         }
