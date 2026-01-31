@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.rholder.retry.RetryException;
 import com.github.rholder.retry.Retryer;
 import com.jgh.aianalysis.annotation.AuthCheck;
+import com.jgh.aianalysis.annotation.Cache;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.service.ChartService;
@@ -33,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -385,6 +387,8 @@ public class ChartController {
      * @return
      */
     @PostMapping("/my/list/page")
+//    @Cache(name = "myChartList")
+//    @Cacheable(cacheNames = {"myChartList"})
     public BaseResponse<Page<Chart>> listMyChartByPage(@RequestBody ChartQueryRequest chartQueryRequest,
                                                        HttpServletRequest request) {
         log.info("获取当前用户创建的图表！", chartQueryRequest);

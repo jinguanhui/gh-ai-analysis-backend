@@ -75,15 +75,21 @@ public class MyMessageConsumer {
         String taskId = message.get("taskId").toString();
         byte[] fileBytes = (byte[]) message.get("fileBytes");
         String originalFilename = message.get("originalFilename").toString();
+        BiResponse biResponse = new BiResponse();
+        BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
 
         Chart chartServiceById = chartService.getById(chartResultId);
+
+        if (ChartStatusEnum.SUCCEED.getStatus().equals(chartServiceById.getStatus())) {
+            log.error("图表已生成成功！");
+            handleSseError(baseResponse, "图表已生成成功！不能重复生成", taskId);
+            throw new BusinessException("图表已生成成功！不能重复生成");
+        }
         String name = chartServiceById.getName();
         String goal = chartServiceById.getGoal();
         String chartType = chartServiceById.getChartType();
         Long userId = chartServiceById.getUserId();
 
-        BiResponse biResponse = new BiResponse();
-        BaseResponse<BiResponse> baseResponse = new BaseResponse<>();
         try {
 
             Chart updateChart = new Chart();

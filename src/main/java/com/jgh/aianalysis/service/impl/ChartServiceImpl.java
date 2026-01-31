@@ -16,6 +16,7 @@ import com.jgh.aianalysis.mq.MyMessageProducer;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
+import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
 import com.jgh.aianalysis.utils.aliyun.FileGreenUtil;
 import com.jgh.ghcommon.common.BaseResponse;
@@ -42,8 +43,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import static com.jgh.ghcommon.constant.CommonConstant.EXCHANGE_NAME;
-import static com.jgh.ghcommon.constant.CommonConstant.ROUTING_KEY;
+import static com.jgh.ghcommon.constant.CommonConstant.*;
 
 /**
  * @author jgh
@@ -82,6 +82,9 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
     @Resource
     private GhFileMapper ghFileMapper;
+
+    @Resource
+    private RedisUtil redisUtil;
 
     //  文件大小最多为1MB
     private final long MAX_FILE_SIZE = 1024 * 1024;
@@ -507,7 +510,6 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
             handleDatabase(e, chart, chartResult, baseResponse, taskId);
             throw new BusinessException("当前系统繁忙，请稍后再试");
         }
-
 
         biResponse.setTaskId(taskId);
         biResponse.setChartId(chartResult.getId());
