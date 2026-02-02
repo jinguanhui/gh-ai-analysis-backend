@@ -3,20 +3,46 @@ package com.jgh.aianalysis.config;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Configuration
-public class ThreadPoolExecutorConfig {
+@EnableAsync
+public class ThreadPoolExecutorConfig implements AsyncConfigurer {
+    
+    @Bean("asyncTaskExecutor")
+    @Override
+    public Executor getAsyncExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 核心线程数
+        executor.setCorePoolSize(10);
+        // 最大线程数
+        executor.setMaxPoolSize(20);
+        // 队列容量
+        executor.setQueueCapacity(200);
+        // 线程存活时间
+        executor.setKeepAliveSeconds(60);
+        // 线程名前缀
+        executor.setThreadNamePrefix("AsyncTask-");
+        // 设置拒绝策略
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // 初始化
+        executor.initialize();
+        return executor;
+    }
+    
     @Bean
     public ThreadPoolExecutor threadPoolExecutor() {
         // 创建一个线程工厂
         ThreadFactory threadFactory = new ThreadFactory() {
             // 初始化线程数为 1
-            private int count = 1;
+            private final AtomicInteger count = new AtomicInteger(1);
 
             @Override
             // 每当线程池需要创建新线程时，就会调用newThread方法
@@ -26,21 +52,20 @@ public class ThreadPoolExecutorConfig {
                 // 创建一个新的线程
                 Thread thread = new Thread(r);
                 // 给新线程设置一个名称，名称中包含线程数的当前值
-                thread.setName("线程" + count);
-                // 线程数递增
-                count++;
+                thread.setName("线程" + count.getAndIncrement());
                 // 返回新创建的线程
                 return thread;
             }
         };
-        // 创建一个新的线程池，线程池核心大小为2，最大线程数为4，
-        // 非核心线程空闲时间为100秒，任务队列为阻塞队列，长度为4，使用自定义的线程工厂创建线程
+
         return new ThreadPoolExecutor(
-                2,
-                2,
-                100,
-                TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(2),
-                threadFactory);
+                10, // 核心线程数
+                20, // 最大线程数
+                60L, // 空闲线程存活时间
+                java.util.concurrent.TimeUnit.SECONDS, // 时间单位
+                new java.util.concurrent.LinkedBlockingQueue<>(1000), // 工作队列
+                threadFactory, // 线程工厂
+                new ThreadPoolExecutor.CallerRunsPolicy() // 拒绝策略
+        );
     }
 }
