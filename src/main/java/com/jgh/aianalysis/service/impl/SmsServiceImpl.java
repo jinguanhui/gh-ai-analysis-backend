@@ -26,6 +26,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
@@ -184,6 +185,14 @@ public class SmsServiceImpl implements SmsService {
         //  生成jwt令牌设置到返回的用户数据中
 
         //  生成jwt令牌设置到返回的用户数据中
+        //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
+        String uerId = newUser.getId().toString();
+        String s = redisUtil.get(uerId + ":refreshToken");
+        if (StringUtils.isNotBlank(s)) {
+            log.error("该账号已经登录过了！");
+            throw new BusinessException("该账号已经登录过了！");
+        }
+
 
         HashMap<String, Object> payload = new HashMap<>();
         payload.put("id", newUser.getId());
@@ -195,12 +204,8 @@ public class SmsServiceImpl implements SmsService {
         log.info("refreshToken: " + refreshToken);
 
         //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
-        String uerId = newUser.getId().toString();
         //  用userId作为key，refreshToken作为value
         redisUtil.set(uerId + ":refreshToken", refreshToken, 7 * 24 * 60 * 60);
-
-        String s = redisUtil.get(uerId + ":refreshToken");
-        log.info("redis: " + s);
 
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", newUser.getId());
