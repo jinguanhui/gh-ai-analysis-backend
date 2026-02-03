@@ -35,6 +35,7 @@ CREATE TABLE `user`
     `salt` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '盐值',
     `email`        varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '邮箱',
     `userStatus`   int NULL DEFAULT 0 COMMENT '状态 0-正常',
+    `isThirdUser`   int NULL DEFAULT 0 COMMENT '状态 0-账号密码登录，1-第三方登录',
     `phone`        varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '电话',
     `createTime`   datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime`   datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

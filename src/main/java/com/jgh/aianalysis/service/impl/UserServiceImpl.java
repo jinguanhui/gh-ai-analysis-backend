@@ -150,8 +150,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String uerId = user.getId().toString();
         String s = redisUtil.get(uerId + ":refreshToken");
         if (StringUtils.isNotBlank(s)) {
-            log.error("该账号已经登录过了！");
-            throw new BusinessException("该账号已经登录过了！");
+            log.error("该账号正在登录中！！！");
+            throw new BusinessException("该账号正在登录中！！！");
         }
 
 
@@ -221,6 +221,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setCreateTime(user.getCreateTime());
         safetyUser.setToken(user.getToken());
         safetyUser.setInvokeCount(user.getInvokeCount());
+        safetyUser.setIsThirdUser(user.getIsThirdUser());
         return safetyUser;
     }
 

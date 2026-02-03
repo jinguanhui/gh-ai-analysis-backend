@@ -112,10 +112,13 @@ public class UserController {
      * @return void
      */
     @PostMapping("/logout")
-    public BaseResponse userLogout(HttpServletRequest request, HttpServletResponse response) {
+    public BaseResponse userLogout(@RequestBody long userId, HttpServletRequest request, HttpServletResponse response) {
         log.info("用户登出！");
 
-        String userId = request.getHeader("userId");
+        if (userId <= 0) {
+            log.error("用户登出失败，用户数据为空");
+            throw new BusinessException("用户登出失败，用户数据为空");
+        }
 
         // 创建Cookie对象，名称与原refreshToken一致
         Cookie cookie = new Cookie("refreshToken", "");

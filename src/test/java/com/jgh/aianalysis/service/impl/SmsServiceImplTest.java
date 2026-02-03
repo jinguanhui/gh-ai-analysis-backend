@@ -15,13 +15,13 @@ class SmsServiceImplTest {
 
     @Test
     void sendLoginCode() {
-        Boolean b = smsService.sendLoginCode("15180091776");
+        Boolean b = smsService.sendLoginCode("15180091776", "100002");
         System.out.println(b);
     }
 
-//    @Test
-//    void verifyCode() {
-//        Boolean b = smsService.verifyCode("15180091776", "0577");
+    @Test
+    void verifyCode() {
+//        Boolean b = smsService.verifyCodeUpdatePhone("15180091776", "0571");
 //        System.out.println(b);
-//    }
+    }
 }

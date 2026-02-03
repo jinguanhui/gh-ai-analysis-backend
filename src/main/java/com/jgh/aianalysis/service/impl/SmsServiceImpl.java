@@ -18,6 +18,7 @@ import com.jgh.aianalysis.utils.IPUtils;
 import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.ghcommon.common.ThirdPartyTypeEnum;
 import com.jgh.ghcommon.common.UserLoginEnum;
+import com.jgh.ghcommon.model.dto.sms.SmsChangePsdCodeVerifyDTO;
 import com.jgh.ghcommon.model.entity.ThirdPartyUser;
 import com.jgh.ghcommon.model.entity.User;
 import com.jgh.ghcommon.model.entity.UserLogin;
@@ -53,12 +54,19 @@ public class SmsServiceImpl implements SmsService {
     @Resource
     private ThirdPartyUserService thirdPartyUserService;
 
+    /**
+     * 电话验证码
+     *
+     * @param phone
+     * @param templateCode
+     * @return
+     */
     @Override
-    public Boolean sendLoginCode(String phone) {
+    public Boolean sendLoginCode(String phone, String templateCode) {
         SendSmsVerifyCodeRequest request = new SendSmsVerifyCodeRequest()
                 .setPhoneNumber(phone)
                 .setSignName("速通互联验证码")
-                .setTemplateCode("100001")
+                .setTemplateCode(templateCode)
                 .setTemplateParam("{\"code\":\"##code##\",\"min\":\"5\"}");
 
         SendSmsVerifyCodeResponse response = null;
@@ -79,8 +87,86 @@ public class SmsServiceImpl implements SmsService {
         return true;
     }
 
+    /**
+     * 登录验证码验证
+     * @param phone
+     * @param code
+     * @param request
+     * @param response
+     * @return
+     */
     @Override
     public User verifyCode(String phone, String code, HttpServletRequest request, HttpServletResponse response) {
+        checkCode(phone, code);
+
+        return getUserThirdLogin(ThirdPartyTypeEnum.PHONE, phone, request, response);
+
+    }
+
+    /**
+     * 修改手机号验证码验证
+     *
+     * @param phone
+     * @param code
+     * @param request
+     * @param response
+     * @return
+     */
+    @Override
+    public Boolean verifyCodeUpdatePhone(String phone, String code, HttpServletRequest request, HttpServletResponse response) {
+        checkCode(phone, code);
+        String userId = request.getHeader("userId");
+
+        if (StringUtils.isBlank(userId)) {
+            log.error("用户不存在");
+            throw new BusinessException("用户不存在");
+        }
+
+        User user = new User();
+        user.setId(Long.valueOf(userId));
+        user.setPhone(phone);
+
+        boolean b = userService.updateById(user);
+        if (!b) {
+            log.error("更新手机号失败");
+            throw new BusinessException("更新手机号失败");
+        }
+        return true;
+    }
+
+    @Override
+    public Boolean verifyChangePsdCode(SmsChangePsdCodeVerifyDTO dto, HttpServletRequest request, HttpServletResponse response) {
+        String phone = dto.getPhone();
+        String code = dto.getCode();
+        String password = dto.getPassword();
+
+
+        checkCode(phone, code);
+
+        String userId = request.getHeader("userId");
+
+        if (StringUtils.isBlank(userId)) {
+            log.error("用户不存在");
+            throw new BusinessException("用户不存在");
+        }
+
+        String salt = RandomUtil.randomNumbers(5);
+        String encryptPassword = DigestUtils.md5DigestAsHex((salt + password).getBytes());
+
+        User user = new User();
+        user.setId(Long.valueOf(userId));
+        user.setUserPassword(encryptPassword);
+        user.setSalt(salt);
+
+        boolean b = userService.updateById(user);
+        if (!b) {
+            log.error("更新手机号失败");
+            throw new BusinessException("更新手机号失败");
+        }
+        return true;
+    }
+
+    private void checkCode(String phone, String code) {
         //  验证码
         CheckSmsVerifyCodeRequest checkSmsVerifyCodeRequest = new CheckSmsVerifyCodeRequest()
                 .setPhoneNumber(phone)
@@ -98,9 +184,6 @@ public class SmsServiceImpl implements SmsService {
         if (!isCheckSuccess) {
             throw new BusinessException("验证码验证失败");
         }
-
-        return getUserThirdLogin(ThirdPartyTypeEnum.PHONE, phone, request, response);
-
     }
 
     @Override

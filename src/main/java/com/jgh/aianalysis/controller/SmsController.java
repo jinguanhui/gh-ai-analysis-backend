@@ -4,10 +4,7 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.service.SmsService;
 import com.jgh.aianalysis.utils.MailMsgUtil;
 import com.jgh.ghcommon.common.BaseResponse;
-import com.jgh.ghcommon.model.dto.sms.MailCodeSendDTO;
-import com.jgh.ghcommon.model.dto.sms.MailCodeVerifyDTO;
-import com.jgh.ghcommon.model.dto.sms.SmsCodeSendDTO;
-import com.jgh.ghcommon.model.dto.sms.SmsCodeVerifyDTO;
+import com.jgh.ghcommon.model.dto.sms.*;
 import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
 import jakarta.mail.MessagingException;
@@ -48,7 +45,7 @@ public class SmsController {
     @PostMapping("/send")
     public BaseResponse<Boolean> sendCode(@RequestBody @Valid SmsCodeSendDTO dto) {
         log.info("正在进行短信发送");
-        return BaseResponse.success(smsService.sendLoginCode(dto.getPhone()));
+        return BaseResponse.success(smsService.sendLoginCode(dto.getPhone(), "100001"));
     }
 
     @PostMapping("/verify")
@@ -61,5 +58,31 @@ public class SmsController {
         }
 
         return BaseResponse.success(user);
+    }
+
+    @PostMapping("/send/update")
+    public BaseResponse<Boolean> sendCodeUpdatePhone(@RequestBody @Valid SmsCodeSendDTO dto) {
+        log.info("正在进行短信发送");
+        return BaseResponse.success(smsService.sendLoginCode(dto.getPhone(), "100002"));
+    }
+
+    @PostMapping("/verify/update")
+    public BaseResponse<Boolean> verifyUpdatePhone(@RequestBody @Valid SmsCodeVerifyDTO dto, HttpServletRequest request, HttpServletResponse response) {
+        log.info("正在进行短信验证");
+
+        return BaseResponse.success(smsService.verifyCodeUpdatePhone(dto.getPhone(), dto.getCode(), request, response));
+    }
+
+    @PostMapping("/send/change_psd")
+    public BaseResponse<Boolean> sendChangePsdCode(@RequestBody @Valid SmsCodeSendDTO dto) {
+        log.info("正在进行短信发送");
+        return BaseResponse.success(smsService.sendLoginCode(dto.getPhone(), "100003"));
+    }
+
+    @PostMapping("/verify/change_psd")
+    public BaseResponse<Boolean> verifyChangePsdCode(@RequestBody @Valid SmsChangePsdCodeVerifyDTO dto, HttpServletRequest request, HttpServletResponse response) {
+        log.info("正在进行短信验证");
+
+        return BaseResponse.success(smsService.verifyChangePsdCode(dto, request, response));
     }
 }
