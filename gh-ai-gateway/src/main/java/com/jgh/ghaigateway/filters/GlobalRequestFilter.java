@@ -18,6 +18,7 @@ import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -64,14 +65,20 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         log.info("IP：{}", realIpAddress);
 
         //  单独校验sse的token，从请求参数获取token
-        if (request.getPath().value().contains("/chart/progress/")) {
+        if (request.getPath().value().contains("/chart/progress/") ||
+                request.getPath().value().contains("/ai/chat")) {
             MultiValueMap<String, String> queryParams = request.getQueryParams();
             List<String> list = queryParams.get("token");
+            if (list == null) {
+                log.error("无token,无权限");
+                response.setStatusCode(HttpStatus.FORBIDDEN);
+                return response.setComplete();
+            }
             String token = list.getFirst();
 
             //  校验token是否为空
             if (token == null) {
-                log.info("token为空,无权限");
+                log.error("token为空,无权限");
                 response.setStatusCode(HttpStatus.FORBIDDEN);
                 return response.setComplete();
             }
@@ -92,7 +99,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
 
             // 判断token是否过期
             if (currentDateTime >= expireTime.getTime()) {
-                log.info("jwt过期，无权限");
+                log.error("jwt过期，无权限");
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return response.setComplete();
             }
@@ -145,7 +152,9 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
                 request.getPath().value().equals("/api/user/register") ||
                 request.getPath().value().equals("/api/user/logout") ||
                 request.getPath().value().equals("/api/sms/send") ||
-                request.getPath().value().equals("/api/sms/verify")) {
+                request.getPath().value().equals("/api/sms/verify") ||
+                request.getPath().value().equals("/api/sms/mail/send") ||
+                request.getPath().value().equals("/api/sms/mail/verify")) {
             log.info("登录和注册接口不进行token校验");
             return chain.filter(exchange.mutate().build());
         }
@@ -160,23 +169,37 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> safeRefreshTokenCheck(ServerWebExchange exchange, GatewayFilterChain chain, ServerHttpRequest request, String realIpAddress, ServerHttpResponse response) {
-        String refreshToken = Objects.requireNonNull(request.getCookies().getFirst("refreshToken")).getValue();
+        HttpCookie refreshToken1 = request.getCookies().getFirst("refreshToken");
+        if (refreshToken1 == null) {
+            log.error("refreshToken为空,无权限");
+            response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
+            return response.setComplete();
+        }
+        String refreshToken = refreshToken1.getValue();
         log.info("refreshToken: {}", refreshToken);
 
         JWT jwt = JWTUtil.parseToken(refreshToken);
         Long id = Convert.toLong(jwt.getPayload("id"));
         DateTime expireTime = DateTime.of(Convert.toDate(jwt.getPayload("expireTime")));
+
+        User userById = innerUserService.getUserById(id);
+        if (userById.getUserStatus() == 1) {
+            log.error("用户被禁用，请重新登录");
+            response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
+            return response.setComplete();
+        }
+
         UserLogin userLoginInfo = new UserLogin();
         //  校验refreshToken是否为空
         if (refreshToken == null) {
-            log.info("refreshToken为空,无权限");
+            log.error("refreshToken为空,无权限");
             response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
             return response.setComplete();
         }
 
         //  校验refreshToken是否为空字符串
         if (StrUtil.isBlank(refreshToken)) {
-            log.info("refreshToken为空字符串,无权限");
+            log.error("refreshToken为空字符串,无权限");
             response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
             return response.setComplete();
         }
@@ -187,10 +210,25 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         long currentDateTime = new DateTime().getTime();
 
         // 尝试从redis中获取refreshToken
-        String userRefreshToken = redisUtil.get(id.toString());
+        String userRefreshToken = redisUtil.get(id.toString() + ":refreshToken");
+        log.info("userRefreshToken: {}", userRefreshToken);
+        log.info("refreshToken:{}", refreshToken);
+
+        if (userRefreshToken == null) {
+            log.error("refreshToken不存在，请重新登录");
+            // 将登录信息计入到数据库中
+            userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
+            userLoginInfo.setUserId(id);
+            userLoginInfo.setLoginStatus(UserLoginEnum.INVALID_LOGIN.getStatus().longValue());
+            userLoginInfo.setLoginPath(realIpAddress);
+
+            innerUserService.insertLoginInfo(userLoginInfo);
+            response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
+            return response.setComplete();
+        }
 
         if (!userRefreshToken.equals(refreshToken)) {
-            log.info("refreshToken错误，请重新登录");
+            log.error("refreshToken错误，请重新登录");
             // 将登录信息计入到数据库中
             userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
             userLoginInfo.setUserId(id);
@@ -205,7 +243,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         //  进行用户异地登录检查，若用户出现异地登录，将refreshToken移除redis，并返回错误
         UserLogin userLogin = innerUserService.getUserLoginById(id);
         if (userLogin == null) {
-            log.info("用户登录信息不存在，请先登录");
+            log.error("用户登录信息不存在，请先登录");
             // 将登录信息计入到数据库中
             userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
             userLoginInfo.setUserId(id);
@@ -220,7 +258,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
 
         String stamp = request.getHeaders().getFirst("stamp");
         if (stamp == null) {
-            log.info("stamp为空,无法权限");
+            log.error("stamp为空,无法权限");
             // 将登录信息计入到数据库中
             userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
             userLoginInfo.setUserId(id);
@@ -240,7 +278,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         String loginPath = userLogin.getLoginPath();
         //  检查用户是否在一个小时之内异地登录，防止refreshToken盗用
         if (requestDate <= newDateTime && !realIpAddress.equals(loginPath)) {
-            log.info("检查到用户异地登录，请重新登录");
+            log.error("检查到用户异地登录，请重新登录");
 // 将登录信息计入到数据库中
             // 将登录信息计入到数据库中
             userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
@@ -257,7 +295,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
 
         // 判断refreshToken是否过期
         if (currentDateTime >= expireTime.getTime()) {
-            log.info("refreshToken过期，请先登录权限");
+            log.error("refreshToken过期，请先登录权限");
             // 将登录信息计入到数据库中
             userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
             userLoginInfo.setUserId(id);
@@ -275,7 +313,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         // 校验refreshToken
         boolean verify = JWTUtil.verify(refreshToken, user.getUserPassword().getBytes());
         if (!verify) {
-            log.info("refreshToken验证失败，无权限");
+            log.error("refreshToken验证失败，无权限");
             // 将登录信息计入到数据库中
             userLoginInfo.setDescription(UserLoginEnum.INVALID_LOGIN.getDesc());
             userLoginInfo.setUserId(id);
@@ -302,14 +340,14 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
 
         //  校验token是否为空
         if (token == null) {
-            log.info("token为空,无权限");
+            log.error("token为空,无权限");
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return response.setComplete();
         }
 
         //  校验token是否为空字符串
         if (StrUtil.isBlank(token)) {
-            log.info("token为空字符串,无权限");
+            log.error("token为空字符串,无权限");
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return response.setComplete();
         }
@@ -319,11 +357,18 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         Long id = Convert.toLong(jwt.getPayload("id"));
         DateTime expireTime = DateTime.of(Convert.toDate(jwt.getPayload("expireTime")));
 
+        User userById = innerUserService.getUserById(id);
+        if (userById.getUserStatus() == 1) {
+            log.error("用户被禁用，请重新登录");
+            response.setStatusCode(HttpStatus.FORBIDDEN);
+            return response.setComplete();
+        }
+
         long currentDateTime = new DateTime().getTime();
 
         // 判断token是否过期
         if (currentDateTime >= expireTime.getTime()) {
-            log.info("jwt过期，无权限");
+            log.error("jwt过期，无权限");
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return response.setComplete();
         }
@@ -334,7 +379,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         // 校验token
         boolean verify = JWTUtil.verify(token, user.getUserPassword().getBytes());
         if (!verify) {
-            log.info("token验证失败，无权限");
+            log.error("token验证失败，无权限");
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return response.setComplete();
         }
@@ -347,8 +392,6 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
         //  将构造的请求体重新复制给赋给exchange，不然不会生效
         return chain.filter(exchange.mutate().request(serverHttpRequest).build());
     }
-
-
     public int getOrder() {
         return -20;
     }
