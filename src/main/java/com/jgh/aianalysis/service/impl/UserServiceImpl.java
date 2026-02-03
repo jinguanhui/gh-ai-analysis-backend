@@ -1,5 +1,6 @@
 package com.jgh.aianalysis.service.impl;
 
+import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.jwt.JWTUtil;
@@ -145,6 +146,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             throw new BusinessException("密码错误！");
         }
 
+        //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
+        String uerId = user.getId().toString();
+        String s = redisUtil.get(uerId + ":refreshToken");
+        if (StringUtils.isNotBlank(s)) {
+            log.error("该账号已经登录过了！");
+            throw new BusinessException("该账号已经登录过了！");
+        }
+
+
         //  生成jwt令牌设置到返回的用户数据中
 
         HashMap<String, Object> payload = new HashMap<>();
@@ -153,16 +163,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         payload.put("userRole", user.getUserRole());
         payload.put("nonce", RandomUtil.randomNumbers(5));
 
+
         String refreshToken = JWTUtil.createToken(payload, user.getUserPassword().getBytes());
         log.info("refreshToken: " + refreshToken);
 
-        //  将refreshToken设置到redis中，以便后续的异地登录检测--和refreshToken一样设置7天过期
-        String uerId = user.getId().toString();
+
         //  用userId作为key，refreshToken作为value
         redisUtil.set(uerId + ":refreshToken", refreshToken, 7 * 24 * 60 * 60);
-
-        String s = redisUtil.get(uerId + ":refreshToken");
-        log.info("redis: " + s);
 
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", user.getId());
@@ -193,6 +200,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             log.info("用户登录失败，登录信息数据库插入失败！");
             throw new BusinessException("用户登录信息数据库插入失败！");
         }
+
 
         // 3.用户脱敏
         return getSafetyUser(user);

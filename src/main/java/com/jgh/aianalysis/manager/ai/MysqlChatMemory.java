@@ -20,6 +20,12 @@ public class MysqlChatMemory implements ChatMemory {
         this.mysqlChatMemoryRepository = mysqlChatMemoryRepository;
         this.maxMessages = maxMessages;
     }
+    @Override
+    public void add(String conversationId, Message message) {
+        Assert.hasText(conversationId, "conversationId cannot be null or empty");
+        Assert.notNull(message, "message cannot be null");
+        this.add(conversationId, List.of(message));
+    }
 
     @Override
     public void add(String conversationId, List<Message> messages) {

@@ -17,7 +17,8 @@ class AIManagerTest {
     @Test
     void doChatWithGuangWu() {
         String conversationId = "1234";
-        String s2 = aiManager.doChatWithGuangWuBy("你还记得我叫什么吗", conversationId);
+//        String s2 = aiManager.doChatWithGuangWuBy("我叫gh", conversationId);
+        String s2 = aiManager.doChatWithGuangWuBy("我叫gh", conversationId);
         assertNotNull( s2);
     }
 }
