@@ -1,5 +1,10 @@
 package com.jgh.aianalysis.handler;
 
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.date.DateTime;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.jwt.JWT;
+import cn.hutool.jwt.JWTUtil;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.RedisLimiterManager;
 import com.jgh.aianalysis.service.AccessKeyService;
@@ -12,9 +17,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
+import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 
@@ -67,7 +77,11 @@ public class MyInterceptor implements HandlerInterceptor {
                 throw new BusinessException("未知用户");
             }
             // 限流--针对用户和某一个方法的细粒度限流
-            redisLimiterManager.doRateLimit("/chart/gen" + userId);
+            if (request.getServletPath().equals("/chart/gen")) redisLimiterManager.doRateLimit("/chart/gen" + userId);
+
+            if (request.getServletPath().equals("/chart/gen/mq")) redisLimiterManager.doRateLimit("/chart/gen/mq" + userId);
+
+            if (request.getServletPath().equals("/chart/gen/sync")) redisLimiterManager.doRateLimit("/chart/gen/sync" + userId);
 
             User user = userService.getById(userId);
             Integer invokeCount = user.getInvokeCount();
@@ -100,4 +114,5 @@ public class MyInterceptor implements HandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
         HandlerInterceptor.super.afterCompletion(request, response, handler, ex);
     }
+
 }
