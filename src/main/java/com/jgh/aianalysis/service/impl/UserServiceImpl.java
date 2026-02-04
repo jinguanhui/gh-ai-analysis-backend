@@ -89,6 +89,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = new User();
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
+        user.setInvokeCount(10);
         user.setSalt(salt);
         String randomNumbers = RandomUtil.randomNumbers(4);
         String username = "用户GH" + randomNumbers;
