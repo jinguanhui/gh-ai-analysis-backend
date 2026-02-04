@@ -10,6 +10,7 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.mapper.UserLoginMapper;
 import com.jgh.aianalysis.mapper.UserMapper;
 import com.jgh.aianalysis.service.UserService;
+import com.jgh.aianalysis.utils.IPRealRegionUtil;
 import com.jgh.aianalysis.utils.IPUtils;
 import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.ghcommon.common.ResponseCode;
@@ -196,6 +197,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         userLogin.setLoginPath(pathInfo);
         userLogin.setDescription(UserLoginEnum.VALID_LOGIN.getDesc());
         userLogin.setLoginStatus(UserLoginEnum.VALID_LOGIN.getStatus().longValue());
+        userLogin.setRegion(IPRealRegionUtil.getRegion(pathInfo));
 
         int insert = userLoginMapper.insert(userLogin);
         if (insert < 1) {

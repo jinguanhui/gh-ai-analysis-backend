@@ -12,10 +12,11 @@
             <result property="loginStatus" column="loginStatus" />
             <result property="createTime" column="createTime" />
             <result property="isDelete" column="isDelete" />
+            <result property="region" column="region" />
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,description,userId,createTime,isDelete,loginStatus,loginPath
+        id,description,userId,createTime,isDelete,loginStatus,loginPath,region
     </sql>
     <select id="getMostNewUserLoginByUserId" resultType="com.jgh.ghcommon.model.entity.UserLogin"
             parameterType="java.lang.Long">

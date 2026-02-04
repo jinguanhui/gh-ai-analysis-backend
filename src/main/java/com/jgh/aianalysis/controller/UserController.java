@@ -220,11 +220,11 @@ public class UserController {
 
         wrapper.eq("userId", currentUserId);
         wrapper.orderBy(true, false, "createTime");
-        wrapper.last("limit 1");
+        wrapper.last("limit 2");
 
-        UserLogin userLogin = userLoginService.getOne(wrapper);
+        List<UserLogin> list = userLoginService.list(wrapper);
 
-        if (userLogin == null) {
+        if (ObjectUtils.isEmpty(list)) {
             log.error("用户登录记录不存在");
             throw new BusinessException("用户登录记录不存在");
         }
@@ -232,8 +232,29 @@ public class UserController {
         UserQueryVo userQueryVo = new UserQueryVo();
         BeanUtils.copyProperties(user, userQueryVo);
 
-        userQueryVo.setLastLoginTime(userLogin.getCreateTime());
-        userQueryVo.setLoginPath(userLogin.getLoginPath());
+        if (list.size() < 2) {
+            //  第一次登录
+            UserLogin first = list.getFirst();
+            userQueryVo.setLastLoginTime(first.getCreateTime());
+            userQueryVo.setLoginPath("");
+            userQueryVo.setRegion("");
+        }else if (list.size() == 2) {
+            //  第二次登录
+            UserLogin last = list.getLast();
+            userQueryVo.setLastLoginTime(last.getCreateTime());
+            userQueryVo.setLoginPath(last.getLoginPath());
+            if (last.getRegion() != null) {
+                String[] split = last.getRegion().split("\\|");
+                if (Arrays.asList(split).contains("Reserved")) {
+                    userQueryVo.setRegion("内网IP登录");
+                }else {
+                    userQueryVo.setRegion(split[0] +"-"+ split[1]+"-" + split[2]);
+                }
+            }else {
+                userQueryVo.setRegion("");
+            }
+
+        }
 
 
         return BaseResponse.success(userQueryVo);

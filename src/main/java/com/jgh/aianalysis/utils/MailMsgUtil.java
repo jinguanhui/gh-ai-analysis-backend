@@ -48,4 +48,22 @@ public class MailMsgUtil {
         mailSender.send(mimeMessage);
         return true;
     }
+
+    public boolean mailLoginMessage(String email,String ip, String loginDate) throws MessagingException {
+
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        //生成随机验证码
+        String code = CodeGeneratorUtil.generateCode(6);
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
+        //设置一个html邮件信息
+        helper.setText("<p style='color: blue'>GH智能分析平台！你的账号存在异地登录!!!登录时间为：" + loginDate + "登录IP为：" + ip + "</p>", true);
+        //设置邮件主题名
+        helper.setSubject("GH智能分析平台异地登录提醒！！！");
+        //发给谁-》邮箱地址
+        helper.setTo(email);
+        //谁发的-》发送人邮箱
+        helper.setFrom(senderMail);
+        mailSender.send(mimeMessage);
+        return true;
+    }
 }
