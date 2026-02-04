@@ -4,6 +4,7 @@ import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONUtil;
 import com.aliyun.tea.TeaUnretryableException;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.rholder.retry.RetryException;
 import com.github.rholder.retry.Retryer;
@@ -13,6 +14,7 @@ import com.jgh.aianalysis.manager.ai.AIManager;
 import com.jgh.aianalysis.mapper.ChartMapper;
 import com.jgh.aianalysis.mapper.GhFileMapper;
 import com.jgh.aianalysis.mq.MyMessageProducer;
+import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
@@ -22,6 +24,7 @@ import com.jgh.aianalysis.utils.aliyun.FileGreenUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ChartStatusEnum;
 import com.jgh.ghcommon.model.dto.chart.GenChartByAiRequest;
+import com.jgh.ghcommon.model.entity.AccessKey;
 import com.jgh.ghcommon.model.entity.Chart;
 import com.jgh.ghcommon.model.entity.GhFile;
 import com.jgh.ghcommon.model.entity.User;
@@ -85,6 +88,9 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
     @Resource
     private RedisUtil redisUtil;
+
+    @Resource
+    private AccessKeyService accessKeyService;
 
     //  文件大小最多为1MB
     private final long MAX_FILE_SIZE = 1024 * 1024;
@@ -376,6 +382,20 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                         handleSseError(baseResponse, "数据库更新错误！", taskId);
                                         throw new BusinessException("数据库更新错误！");
                                     }
+
+                                    UpdateWrapper<AccessKey> wrapper = new UpdateWrapper<>();
+
+                                    wrapper.eq("userId", userId);
+                                    wrapper.set("lastUsedTime", new Date());
+
+                                    boolean update = accessKeyService.update(wrapper);
+
+                                    if (!update) {
+                                        log.error("AccessKey数据库更新错误！");
+                                        handleSseError(baseResponse, "AccessKey数据库更新错误！", taskId);
+                                        throw new BusinessException("AccessKey数据库更新错误！");
+                                    }
+
                                     // 5. 完成任务（100%）
                                     log.info("任务完成...");
                                     biResponse.setChartId(chartResult.getId());
@@ -803,6 +823,20 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                         handleSseError(baseResponse, "数据库更新错误！", taskId);
                                         throw new BusinessException("数据库更新错误！");
                                     }
+
+                                    UpdateWrapper<AccessKey> wrapper = new UpdateWrapper<>();
+
+                                    wrapper.eq("userId", userId);
+                                    wrapper.set("lastUsedTime", new Date());
+
+                                    boolean update = accessKeyService.update(wrapper);
+
+                                    if (!update) {
+                                        log.error("AccessKey数据库更新错误！");
+                                        handleSseError(baseResponse, "AccessKey数据库更新错误！", taskId);
+                                        throw new BusinessException("AccessKey数据库更新错误！");
+                                    }
+
                                     // 5. 完成任务（100%）
                                     log.info("任务完成...");
                                     biResponse.setChartId(chartResult.getId());
@@ -1256,6 +1290,20 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                     handleSseError(baseResponse, "数据库更新错误！", taskId);
                     throw new BusinessException("数据库更新错误！");
                 }
+
+                UpdateWrapper<AccessKey> wrapper = new UpdateWrapper<>();
+
+                wrapper.eq("userId", userId);
+                wrapper.set("lastUsedTime", new Date());
+
+                boolean update = accessKeyService.update(wrapper);
+
+                if (!update) {
+                    log.error("AccessKey数据库更新错误！");
+                    handleSseError(baseResponse, "AccessKey数据库更新错误！", taskId);
+                    throw new BusinessException("AccessKey数据库更新错误！");
+                }
+
 
                 // 5. 完成任务（100%）
                 log.info("任务完成...");

@@ -1,6 +1,7 @@
 package com.jgh.aianalysis.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.jgh.ghcommon.model.dto.user.UserQueryVo;
 import com.jgh.ghcommon.model.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -41,5 +42,6 @@ public interface UserService extends IService<User> {
      * @return 脱敏后的用户数据
      */
     User getSafetyUser(User user);
+
 
 }

@@ -6,6 +6,7 @@ import cn.hutool.jwt.JWTUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
+import com.jgh.aianalysis.service.UserLoginService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
 import com.jgh.aianalysis.utils.RedisUtil;
@@ -15,8 +16,10 @@ import com.jgh.ghcommon.common.ResponseCode;
 import com.jgh.ghcommon.constant.UserConstant;
 import com.jgh.ghcommon.model.dto.user.UserLoginRequest;
 import com.jgh.ghcommon.model.dto.user.UserQueryDto;
+import com.jgh.ghcommon.model.dto.user.UserQueryVo;
 import com.jgh.ghcommon.model.dto.user.UserRegisterRequest;
 import com.jgh.ghcommon.model.entity.User;
+import com.jgh.ghcommon.model.entity.UserLogin;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -55,6 +59,9 @@ public class UserController {
 
     @Resource
     private ImageGreenUtils imageGreenUtils;
+
+    @Resource
+    private UserLoginService userLoginService;
 
     /**
      * 用户注册
@@ -195,7 +202,7 @@ public class UserController {
 
     //  查询用户本人数据
     @GetMapping("/getone")
-    public BaseResponse<User> getUser(HttpServletRequest request) {
+    public BaseResponse<UserQueryVo> getUser(HttpServletRequest request) {
         log.info("查询用户");
         Long currentUserId = Long.valueOf(request.getHeader("userId"));
         if (currentUserId == null) {
@@ -205,10 +212,31 @@ public class UserController {
         User user = userService.getById(currentUserId);
 
         if (user == null) {
-            log.info("用户查询失败，用户不存在");
-            throw new BusinessException(ResponseCode.USER_UNKNOWN_ERROR);
+            log.error("用户查询失败，用户不存在");
+            throw new BusinessException("用户查询失败，用户不存在");
         }
-        return BaseResponse.success(userService.getSafetyUser(user));
+
+        QueryWrapper<UserLogin> wrapper = new QueryWrapper<>();
+
+        wrapper.eq("userId", currentUserId);
+        wrapper.orderBy(true, false, "createTime");
+        wrapper.last("limit 1");
+
+        UserLogin userLogin = userLoginService.getOne(wrapper);
+
+        if (userLogin == null) {
+            log.error("用户登录记录不存在");
+            throw new BusinessException("用户登录记录不存在");
+        }
+
+        UserQueryVo userQueryVo = new UserQueryVo();
+        BeanUtils.copyProperties(user, userQueryVo);
+
+        userQueryVo.setLastLoginTime(userLogin.getCreateTime());
+        userQueryVo.setLoginPath(userLogin.getLoginPath());
+
+
+        return BaseResponse.success(userQueryVo);
     }
 
     @PostMapping("/delete")

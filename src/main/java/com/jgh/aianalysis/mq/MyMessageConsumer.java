@@ -1,9 +1,11 @@
 package com.jgh.aianalysis.mq;
 
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.manager.ai.AIManager;
+import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
@@ -11,6 +13,7 @@ import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
 import com.jgh.aianalysis.utils.aliyun.FileGreenUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.common.ChartStatusEnum;
+import com.jgh.ghcommon.model.entity.AccessKey;
 import com.jgh.ghcommon.model.entity.Chart;
 import com.jgh.ghcommon.model.entity.User;
 import com.jgh.ghcommon.model.vo.BiResponse;
@@ -28,6 +31,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -55,6 +59,9 @@ public class MyMessageConsumer {
 
     @Resource
     private ChartService chartService;
+
+    @Resource
+    private AccessKeyService accessKeyService;
 
     /**
      * 接收消息的方法
@@ -227,6 +234,20 @@ public class MyMessageConsumer {
                 handleSseError(baseResponse, "数据库更新错误！", taskId);
                 throw new BusinessException("数据库更新错误！");
             }
+
+            UpdateWrapper<AccessKey> wrapper = new UpdateWrapper<>();
+
+            wrapper.eq("userId", userId);
+            wrapper.set("lastUsedTime", new Date());
+
+            boolean update = accessKeyService.update(wrapper);
+
+            if (!update) {
+                log.error("AccessKey数据库更新错误！");
+                handleSseError(baseResponse, "AccessKey数据库更新错误！", taskId);
+                throw new BusinessException("AccessKey数据库更新错误！");
+            }
+
             // 5. 完成任务（100%）
             log.info("任务完成...");
             biResponse.setChartId(chartResultId);

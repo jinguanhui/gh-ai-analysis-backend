@@ -14,6 +14,7 @@ import com.jgh.aianalysis.utils.IPUtils;
 import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.ghcommon.common.ResponseCode;
 import com.jgh.ghcommon.common.UserLoginEnum;
+import com.jgh.ghcommon.model.dto.user.UserQueryVo;
 import com.jgh.ghcommon.model.entity.User;
 import com.jgh.ghcommon.model.entity.UserLogin;
 import jakarta.annotation.Resource;
@@ -225,6 +226,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setIsThirdUser(user.getIsThirdUser());
         return safetyUser;
     }
+
 
 }
 
