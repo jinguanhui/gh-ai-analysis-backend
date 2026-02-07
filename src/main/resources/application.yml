@@ -84,7 +84,8 @@ alipay:
   # 支付通知的回调地址，支付宝会在支付完成后通知这个地址
   notifyUrl: http://f8a4f5b6.natappfree.cc/api/alipay/notify
   # 页面跳转地址，支付完成后跳转到此URL
-  returnUrl: https://127.0.0.1:3000
+  returnUrl: http://127.0.0.1:3000/user/center
+#  returnUrl: https://www.baidu.com
   # 签名类型，通常为RSA2
   signType: RSA2
   # 字符编码，通常为utf-8
