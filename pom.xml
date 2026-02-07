@@ -231,6 +231,18 @@
             <version>3.3.4</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.alipay.sdk</groupId>
+            <artifactId>alipay-sdk-java</artifactId>
+            <version>4.40.649.ALL</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.4.1</version>
+        </dependency>
+
         <!--        test-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
