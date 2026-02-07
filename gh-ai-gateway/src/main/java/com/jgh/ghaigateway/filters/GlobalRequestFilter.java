@@ -169,18 +169,25 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> safeRefreshTokenCheck(ServerWebExchange exchange, GatewayFilterChain chain, ServerHttpRequest request, String realIpAddress, ServerHttpResponse response) {
-        HttpCookie refreshToken1 = request.getCookies().getFirst("refreshToken");
-        if (refreshToken1 == null) {
+        String token = request.getHeaders().getFirst("token");
+
+        JWT jwtRefresh = JWTUtil.parseToken(token);
+        Long idRefresh = Convert.toLong(jwtRefresh.getPayload("id"));
+
+        String refreshToken = redisUtil.get(idRefresh + ":refreshToken");
+
+
+        if (refreshToken == null) {
             log.error("refreshToken为空,无权限");
             response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
             return response.setComplete();
         }
-        String refreshToken = refreshToken1.getValue();
         log.info("refreshToken: {}", refreshToken);
 
         JWT jwt = JWTUtil.parseToken(refreshToken);
         Long id = Convert.toLong(jwt.getPayload("id"));
         DateTime expireTime = DateTime.of(Convert.toDate(jwt.getPayload("expireTime")));
+
 
         User userById = innerUserService.getUserById(id);
         if (userById.getUserStatus() == 1) {
@@ -287,7 +294,7 @@ public class GlobalRequestFilter implements GlobalFilter, Ordered {
             userLoginInfo.setLoginPath(realIpAddress);
 
             innerUserService.insertLoginInfo(userLoginInfo);
-            redisUtil.remove("refreshToken", refreshToken);
+            redisUtil.remove(id+":refreshToken", refreshToken);
             response.setStatusCode(HttpStatus.NOT_ACCEPTABLE);
             return response.setComplete();
         }
