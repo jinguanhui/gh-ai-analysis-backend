@@ -6,6 +6,7 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.modal.dto.OrderDetailDto;
 import com.jgh.aianalysis.modal.dto.OrderPayDto;
 import com.jgh.aianalysis.modal.entity.Order;
+import com.jgh.aianalysis.mq.MyMessageProducer;
 import com.jgh.aianalysis.service.OrderService;
 import com.jgh.ghcommon.common.BaseResponse;
 import jakarta.annotation.Resource;
@@ -16,6 +17,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
+
+import static com.jgh.aianalysis.mq.MQConstant.*;
+
+
 @RestController
 @RequestMapping("/order")
 @Slf4j
@@ -23,6 +29,9 @@ public class OrderController {
 
     @Resource
     private OrderService orderService;
+
+    @Resource
+    private MyMessageProducer myMessageProducer;
 
     @PostMapping("/create")
     public BaseResponse<Boolean> createOrder(@RequestBody OrderPayDto orderPayDto, HttpServletRequest request) {
@@ -47,6 +56,12 @@ public class OrderController {
             log.error("创建订单失败");
             throw new BusinessException("创建订单失败");
         }
+
+        // todo  向消费者发送消息，设置15分钟过期，然后由死信队列去接受
+        HashMap<Object, Object> objectObjectHashMap = new HashMap<>();
+        objectObjectHashMap.put("orderId", orderPayDto.getId());
+        objectObjectHashMap.put("userId", userId);
+        myMessageProducer.sendMessage(ORDER_EXCHANGE_NAME, ORDER_ROUTING_KEY, objectObjectHashMap);
         return BaseResponse.success( true);
     }
 

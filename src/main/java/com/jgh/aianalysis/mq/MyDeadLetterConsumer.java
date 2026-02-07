@@ -1,11 +1,16 @@
 package com.jgh.aianalysis.mq;
 
+import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.jgh.aianalysis.constant.PayStatusEnum;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.manager.ai.AIManager;
+import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.service.ChartService;
 import com.jgh.aianalysis.service.GhFileService;
+import com.jgh.aianalysis.service.OrderService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
 import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
@@ -43,6 +48,9 @@ public class MyDeadLetterConsumer {
     @Resource
     private GhFileService ghFileService;
 
+    @Resource
+    private OrderService orderService;
+
     /**
      * 接收消息的方法
      *
@@ -56,7 +64,7 @@ public class MyDeadLetterConsumer {
     // @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag是一个方法参数注解,用于从消息头中获取投递标签(deliveryTag),
     // 在RabbitMQ中,每条消息都会被分配一个唯一的投递标签，用于标识该消息在通道中的投递状态和顺序。通过使用@Header(AmqpHeaders.DELIVERY_TAG)注解,可以从消息头中提取出该投递标签,并将其赋值给long deliveryTag参数。
     public void receiveDeadMessage(Map message, Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
-        log.info("死信队列开始工作，死信消息 = {}", message.toString());
+        log.info("AI分析死信队列开始工作，死信消息 = {}", message.toString());
         Long chartResultId = Long.valueOf(message.get("chartResultId").toString());
 
         UpdateWrapper<Chart> wrapper = new UpdateWrapper<>();
@@ -67,6 +75,7 @@ public class MyDeadLetterConsumer {
         boolean update = chartService.update(wrapper);
         if (!update) {
             log.error("死信队列执行时，遇到图表不存在问题");
+            handleMessageReject(channel, deliveryTag);
             throw new BusinessException("图表不存在");
         }
 
@@ -79,6 +88,7 @@ public class MyDeadLetterConsumer {
         boolean save = ghFileService.save(ghFile);
         if (!save) {
             log.error("死信队列执行时，保存重试文件失败");
+            handleMessageReject(channel, deliveryTag);
             throw new BusinessException("保存重试文件失败");
         }
 
@@ -86,7 +96,81 @@ public class MyDeadLetterConsumer {
             channel.basicAck(deliveryTag, false);
         } catch (IOException e) {
             log.error("MQ任务发送失败！！！", e);
+            handleMessageReject(channel, deliveryTag);
             throw new BusinessException("MQ任务发送失败！！！");
+        }
+    }
+
+    /**
+     * 订单延时队列
+     *
+     * @param message
+     * @param channel
+     * @param deliveryTag
+     */
+    @RabbitListener(queues = {"order_dead_queue"}, ackMode = "MANUAL")
+    public void receiveOrderMessage(Map message, Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+        log.info("接收到订单消息...:{}" , JSONUtil.toJsonStr(message));
+
+        Object origianMessage = message.get("orderId");
+        Object userOrigian = message.get("userId");
+
+        if (ObjectUtils.isEmpty(userOrigian)) {
+            log.error("用户不存在");
+            handleMessageReject(channel, deliveryTag);
+            throw new BusinessException("用户不存在");
+        }
+
+        if (ObjectUtils.isEmpty(origianMessage)) {
+            log.error("订单不存在");
+            handleMessageReject(channel, deliveryTag);
+            throw new BusinessException("订单不存在");
+        }
+
+        Long orderId = Long.parseLong(origianMessage.toString());
+        Long userId = Long.parseLong(userOrigian.toString());
+
+        QueryWrapper<Order> wrapper = new QueryWrapper<>();
+        wrapper.eq("id", orderId);
+        wrapper.eq("userId", userId);
+        Order order = orderService.getOne(wrapper);
+
+        if (order == null) {
+            log.error("订单不存在");
+            handleMessageReject(channel, deliveryTag);
+            throw new BusinessException("订单不存在");
+        }
+
+        //  如果订单的状态为待支付状态，取消订单
+        if (PayStatusEnum.AWAIT_PAY.getStatus().equals(order.getStatus())) {
+            order.setStatus(PayStatusEnum.CANCEL.getStatus());
+            order.setDescription("用户超时未支付，已取消");
+            boolean update = orderService.updateById(order);
+            if (!update) {
+                log.error("数据库更新错误！");
+                handleMessageReject(channel, deliveryTag);
+                throw new BusinessException("数据库更新错误！");
+            }
+        }
+
+
+        try {
+            channel.basicAck(deliveryTag, false);
+            log.info("任务完成...已成功取消订单");
+        } catch (IOException e) {
+            log.error("MQ任务发送失败！！！", e);
+            handleMessageReject(channel, deliveryTag);
+            throw new BusinessException("MQ任务发送失败！！！");
+        }
+    }
+
+    private static void handleMessageReject(Channel channel, long deliveryTag) {
+        log.error("拒接AI分析消息");
+        try {
+            channel.basicReject(deliveryTag, false);
+        } catch (IOException e) {
+            log.error("消息手动拒接失败！");
+            throw new BusinessException("消息手动拒接失败！");
         }
     }
 }

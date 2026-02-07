@@ -1,5 +1,9 @@
 package com.jgh.aianalysis.controller;
 
+import com.alipay.api.AlipayClient;
+import com.alipay.api.AlipayConfig;
+import com.alipay.api.DefaultAlipayClient;
+import com.alipay.api.internal.util.AlipaySignature;
 import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.service.AlipayService;
 import com.jgh.ghcommon.common.BaseResponse;
@@ -26,6 +30,9 @@ public class AliPayController {
     @Resource
     private AlipayService alipayService;
 
+    @Resource
+    private AlipayConfig alipayConfig;
+
     /**
      * 收银台点击结账
      * 发起下单请求
@@ -41,52 +48,56 @@ public class AliPayController {
      */
     @PostMapping("/notify")
     public BaseResponse<Boolean> notify(HttpServletRequest request, HttpServletResponse response) throws Exception {
-//        Map<String, String> params = new HashMap<>();
-//        //获取支付宝POST过来反馈信息，将异步通知中收到的待验证所有参数都存放到map中
-//        Map<String, String[]> parameterMap = request.getParameterMap();
-//        for (String name : parameterMap.keySet()) {
-//            String[] values = parameterMap.get(name);
-//            String valueStr = "";
-//            for (int i = 0; i < values.length; i++) {
-//                valueStr = (i == values.length - 1) ? valueStr + values[i]
-//                        : valueStr + values[i] + ",";
-//            }
-//            //乱码解决
-//            valueStr = new String(valueStr.getBytes("ISO-8859-1"), "utf-8");
-//            params.put(name, valueStr);
-//        }
-//        //验签
-//        Boolean signResult = Factory.Payment.Common().verifyNotify(params);
-//        if (signResult) {
-//            log.info("收到支付宝发送的支付结果通知");
-//            String out_trade_no = request.getParameter("out_trade_no");
-//            log.info("交易流水号：{}", out_trade_no);
-//            //交易状态
-//            String trade_status = new String(request.getParameter("trade_status").getBytes("ISO-8859-1"), "UTF-8");
-//            //交易成功
-//            switch (trade_status) {
-//                case "TRADE_SUCCESS":
-//                    //支付成功的业务逻辑，比如落库，开vip权限等
-//                    log.info("订单：{} 交易成功", out_trade_no);
-//                    break;
-//                case "TRADE_FINISHED":
-//                    log.info("交易结束，不可退款");
-//                    //其余业务逻辑
-//                    break;
-//                case "TRADE_CLOSED":
-//                    log.info("超时未支付，交易已关闭，或支付完成后全额退款");
-//                    //其余业务逻辑
-//                    break;
-//                case "WAIT_BUYER_PAY":
-//                    log.info("交易创建，等待买家付款");
-//                    //其余业务逻辑
-//                    break;
-//            }
-//            response.getWriter().write("success");   //返回success给支付宝，表示消息我已收到，不用重调
-//
-//        } else {
-//            response.getWriter().write("fail");   ///返回fail给支付宝，表示消息我没收到，请重试
-//        }
+        Map<String, String> params = new HashMap<>();
+        //获取支付宝POST过来反馈信息，将异步通知中收到的待验证所有参数都存放到map中
+        Map<String, String[]> parameterMap = request.getParameterMap();
+        for (String name : parameterMap.keySet()) {
+            String[] values = parameterMap.get(name);
+            String valueStr = "";
+            for (int i = 0; i < values.length; i++) {
+                valueStr = (i == values.length - 1) ? valueStr + values[i]
+                        : valueStr + values[i] + ",";
+            }
+            //乱码解决
+            valueStr = new String(valueStr.getBytes("ISO-8859-1"), "utf-8");
+            params.put(name, valueStr);
+        }
+        //验签
+        AlipayClient alipayClient = new DefaultAlipayClient(alipayConfig);
+        Boolean  signVerified = AlipaySignature.rsaCheckV1(params,
+                alipayConfig.getAlipayPublicKey(),
+                alipayConfig.getCharset(),
+                alipayConfig.getSignType());  //调用SDK验证签名
+        if (signVerified) {
+            log.info("收到支付宝发送的支付结果通知");
+            String out_trade_no = request.getParameter("out_trade_no");
+            log.info("交易流水号：{}", out_trade_no);
+            //交易状态
+            String trade_status = new String(request.getParameter("trade_status").getBytes("ISO-8859-1"), "UTF-8");
+            //交易成功
+            switch (trade_status) {
+                case "TRADE_SUCCESS":
+                    //支付成功的业务逻辑，比如落库，开vip权限等
+                    log.info("订单：{} 交易成功", out_trade_no);
+                    break;
+                case "TRADE_FINISHED":
+                    log.info("交易结束，不可退款");
+                    //其余业务逻辑
+                    break;
+                case "TRADE_CLOSED":
+                    log.info("超时未支付，交易已关闭，或支付完成后全额退款");
+                    //其余业务逻辑
+                    break;
+                case "WAIT_BUYER_PAY":
+                    log.info("交易创建，等待买家付款");
+                    //其余业务逻辑
+                    break;
+            }
+            response.getWriter().write("success");   //返回success给支付宝，表示消息我已收到，不用重调
+
+        } else {
+            response.getWriter().write("fail");   ///返回fail给支付宝，表示消息我没收到，请重试
+        }
         return BaseResponse.success(true);
     }
 //    @GetMapping(value = "/pay", produces = "text/html")

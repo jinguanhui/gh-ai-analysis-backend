@@ -2,11 +2,14 @@ package com.jgh.aianalysis.mq;
 
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.jgh.aianalysis.constant.PayStatusEnum;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.manager.SseEmitterManager;
 import com.jgh.aianalysis.manager.ai.AIManager;
+import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.service.AccessKeyService;
 import com.jgh.aianalysis.service.ChartService;
+import com.jgh.aianalysis.service.OrderService;
 import com.jgh.aianalysis.service.UserService;
 import com.jgh.aianalysis.utils.ExcelUtils;
 import com.jgh.aianalysis.utils.aliyun.AliyunOSSUtil;
@@ -63,6 +66,9 @@ public class MyMessageConsumer {
     @Resource
     private AccessKeyService accessKeyService;
 
+    @Resource
+    private OrderService orderService;
+
     /**
      * 接收消息的方法
      *
@@ -88,7 +94,8 @@ public class MyMessageConsumer {
         Chart chartServiceById = chartService.getById(chartResultId);
 
         if (ChartStatusEnum.SUCCEED.getStatus().equals(chartServiceById.getStatus())) {
-            log.error("图表已生成成功！");
+            log.error("图表已生成成功！不能重复生成");
+            handleMessageReject(channel, deliveryTag);
             handleSseError(baseResponse, "图表已生成成功！不能重复生成", taskId);
             throw new BusinessException("图表已生成成功！不能重复生成");
         }
@@ -107,6 +114,8 @@ public class MyMessageConsumer {
             if (!b1) {
                 log.error("图表更新失败！");
                 handleSseError(baseResponse, "图表更新失败！", taskId);
+                handleMessageReject(channel, deliveryTag);
+
                 throw new BusinessException("图表更新失败！");
             }
 
@@ -116,14 +125,17 @@ public class MyMessageConsumer {
             biResponse.setTaskId(taskId);
             handleSseSend(biResponse, "正在处理参数...", 10, baseResponse);
             if (StringUtils.isBlank(goal)) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "请输入分析目标", taskId);
                 throw new BusinessException("请输入分析目标");
             }
             if (StringUtils.isBlank(name)) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "请输入分析表的名称", taskId);
                 throw new BusinessException("请输入分析表的名称");
             }
             if (StringUtils.isNotBlank(name) && name.length() > 100) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "名称过长", taskId);
                 throw new BusinessException("名称过长");
             }
@@ -136,12 +148,14 @@ public class MyMessageConsumer {
             } catch (IOException e) {
                 log.error("上传文件失败！", e);
                 handleSseError(baseResponse, "上传文件失败！！！", taskId);
+                handleMessageReject(channel, deliveryTag);
                 e.printStackTrace();
                 throw new BusinessException("上传文件失败！！！");
             }
 
             if (fileURL == null) {
                 log.error("上传文件失败！");
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "上传文件失败！！！", taskId);
                 throw new BusinessException("上传文件失败！！！");
             }
@@ -152,12 +166,14 @@ public class MyMessageConsumer {
                 map = fileGreenUtil.fileGreenCheck(fileURL, "file");
             } catch (Exception e) {
                 log.error("文件存在不合规内容！！！");
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "文件存在不合规内容！！！", taskId);
                 throw new BusinessException("文件存在不合规内容！！！");
             }
 
             if (ObjectUtils.isEmpty(map) || !"pass".equals(map.get("suggestion"))) {
                 log.error("文件检测失败！！！内容不合规");
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "文件检测失败！！！内容不合规", taskId);
                 throw new BusinessException("文件检测失败！！！内容不合规");
             }
@@ -175,6 +191,7 @@ public class MyMessageConsumer {
             String result = aIManager.doChat(goal, CsvData, chartType);
             String[] splits = result.split("【【【【【");
             if (splits.length < 3) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "AI生成错误！", taskId);
                 throw new BusinessException("AI生成错误！");
             }
@@ -200,6 +217,7 @@ public class MyMessageConsumer {
             boolean saveResult = chartService.updateById(chart);
             if (!saveResult) {
                 log.error("数据库插入错误！");
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "数据库插入错误！", taskId);
                 throw new BusinessException("数据库插入错误！");
             }
@@ -207,16 +225,19 @@ public class MyMessageConsumer {
 
             User user = userService.getById(userId2);
             if (user == null) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "用户不存在！", taskId);
                 throw new BusinessException("用户不存在！");
             }
             if (user.getInvokeCount() < 1) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "调用次数不足！", taskId);
                 throw new BusinessException("调用次数不足！");
             }
             user.setInvokeCount(user.getInvokeCount() - 1);
             boolean b = userService.updateById(user);
             if (!b) {
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "数据库更新错误！", taskId);
                 throw new BusinessException("数据库更新错误！");
             }
@@ -231,6 +252,7 @@ public class MyMessageConsumer {
             boolean updateResult = chartService.updateById(updateChartResult);
             if (!updateResult) {
                 log.error("数据库更新错误！");
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "数据库更新错误！", taskId);
                 throw new BusinessException("数据库更新错误！");
             }
@@ -244,6 +266,7 @@ public class MyMessageConsumer {
 
             if (!update) {
                 log.error("AccessKey数据库更新错误！");
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "AccessKey数据库更新错误！", taskId);
                 throw new BusinessException("AccessKey数据库更新错误！");
             }
@@ -263,11 +286,13 @@ public class MyMessageConsumer {
             } catch (BusinessException ex) {
                 log.error("数据库更新错误！");
                 ex.printStackTrace();
+                handleMessageReject(channel, deliveryTag);
                 handleSseError(baseResponse, "数据库更新错误！", taskId);
                 throw new BusinessException("数据库更新错误");
             }
             // 发送错误信息
             e.printStackTrace();
+            handleMessageReject(channel, deliveryTag);
             handleSseError(baseResponse, "任务执行错误！", taskId);
             throw new BusinessException("任务执行错误！");
         } finally {
@@ -279,8 +304,20 @@ public class MyMessageConsumer {
         try {
             channel.basicAck(deliveryTag, false);
         } catch (IOException e) {
+            handleMessageReject(channel, deliveryTag);
             log.error("MQ任务发送失败！！！", e);
             throw new BusinessException("MQ任务发送失败！！！");
+        }
+    }
+
+
+    private void handleMessageReject(Channel channel, long deliveryTag) {
+        log.error("拒接AI分析消息");
+        try {
+            channel.basicReject(deliveryTag, false);
+        } catch (IOException e) {
+            log.error("消息手动拒接失败！");
+            throw new BusinessException("消息手动拒接失败！");
         }
     }
 
