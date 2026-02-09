@@ -174,16 +174,10 @@ public class UserController {
         }
 
         //  生成jwt令牌设置到返回的用户数据中
-
-        String refreshToken = request.getCookies()[0].getValue();
-
-        log.info("refreshToken: {}" , refreshToken);
-
         HashMap<String, Object> payload2 = new HashMap<>();
         payload2.put("id", user.getId());
         payload2.put("expireTime", DateUtil.offsetDay(new Date(), 1));
         payload2.put("userRole", user.getUserRole());
-        payload2.put("refreshToken", refreshToken);
         String token = JWTUtil.createToken(payload2, user.getUserPassword().getBytes());
         return BaseResponse.success(token);
     }

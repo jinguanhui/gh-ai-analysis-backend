@@ -82,7 +82,7 @@ alipay:
   # 应用公钥，用于验证支付宝的响应
   alipayPublicKey: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAg0MUQ6XRvhP8bQw+RGeb4ipnQZHOzuNeesWWcmNCvCI6pjT1TU1A2LgqU+H26xrVF9PpTMt09F2XuzHz8MZNKStIWtSeTinOo9J92j0Z8BanlLlUoXUUYeHCotqsRVwkGwfKuTr0KaZmwakc9s2GR5Qj9fbKcLCeQjKDJY3Wa2QYEuF4hgCrQ17RjpP3iQ5rCfnP3BQwp7yjdiyq3Vb0P3fNe6Qd6E7DVJcxsbvSEYG9IaYdu0bgcNQX9geEtybx62T5EoYuqu1+UXs1S9IiAo/NlDVs/clQUEmZiobceo6kz1UCShm2tKLwcDN7YGkMfAaWTv9s9yYXTlTHCOuHaQIDAQAB
   # 支付通知的回调地址，支付宝会在支付完成后通知这个地址
-  notifyUrl: http://f8a4f5b6.natappfree.cc/api/alipay/notify
+  notifyUrl: http://y69c87e6.natappfree.cc/api/alipay/notify
   # 页面跳转地址，支付完成后跳转到此URL
   returnUrl: http://127.0.0.1:3000/user/center
 #  returnUrl: https://www.baidu.com

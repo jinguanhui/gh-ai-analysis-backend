@@ -1,26 +1,22 @@
-package com.jgh.aianalysis.modal.entity;
+package com.jgh.aianalysis.modal.dto;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.jgh.ghcommon.common.PageRequest;
+import lombok.Data;
 
 import java.util.Date;
-
-import lombok.Data;
 
 /**
  * 图表信息表
  *
  * @TableName order
  */
-@TableName(value = "orders")
 @Data
-public class Order {
+public class OrderPageDto extends PageRequest {
     /**
      * id
      */
-    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
@@ -47,7 +43,6 @@ public class Order {
      * 订单描述
      */
     private String description;
-    private String alipayTradeNo;
 
     /**
      * 创建时间
@@ -61,9 +56,4 @@ public class Order {
 
     private Date payTime;
 
-    /**
-     * 是否删除
-     */
-    @TableLogic
-    private Integer isDelete;
 }

@@ -1,14 +1,17 @@
 package com.jgh.aianalysis.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jgh.aianalysis.constant.PayStatusEnum;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.modal.dto.OrderDetailDto;
+import com.jgh.aianalysis.modal.dto.OrderPageDto;
 import com.jgh.aianalysis.modal.dto.OrderPayDto;
 import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.mq.MyMessageProducer;
 import com.jgh.aianalysis.service.OrderService;
 import com.jgh.ghcommon.common.BaseResponse;
+import com.jgh.ghcommon.model.entity.Chart;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Date;
 import java.util.HashMap;
 
 import static com.jgh.aianalysis.mq.MQConstant.*;
@@ -62,7 +66,7 @@ public class OrderController {
         objectObjectHashMap.put("orderId", orderPayDto.getId());
         objectObjectHashMap.put("userId", userId);
         myMessageProducer.sendMessage(ORDER_EXCHANGE_NAME, ORDER_ROUTING_KEY, objectObjectHashMap);
-        return BaseResponse.success( true);
+        return BaseResponse.success(true);
     }
 
     @PostMapping("/detail")
@@ -88,6 +92,44 @@ public class OrderController {
         }
 
         return BaseResponse.success(order);
+    }
+
+    @PostMapping("/list/page")
+    public BaseResponse<Page<Chart>> getOrderList(@RequestBody OrderPageDto orderPageDto, HttpServletRequest request) {
+        log.info("分页获取订单列表");
+        String userIdString = request.getHeader("userId");
+        if (userIdString == null) {
+            log.error("用户不存在");
+            throw new BusinessException("用户不存在");
+        }
+        long current = orderPageDto.getCurrent();
+        long size = orderPageDto.getPageSize();
+        Page<Chart> chartPage = orderService.page(new Page<>(current, size),
+                getQueryWrapper(orderPageDto));
+        return BaseResponse.success(chartPage);
+
+    }
+
+    private QueryWrapper getQueryWrapper(OrderPageDto orderPageDto) {
+
+        Long id = orderPageDto.getId();
+        Long userId = orderPageDto.getUserId();
+        Double money = orderPageDto.getMoney();
+        String paymentMethod = orderPageDto.getPaymentMethod();
+        Integer status = orderPageDto.getStatus();
+        String description = orderPageDto.getDescription();
+
+        QueryWrapper<Chart> wrapper = new QueryWrapper<>();
+        wrapper.eq(id != null && id > 0, "id", id)
+                .eq(userId != null, "userId", userId)
+                .eq(money != null, "money", money)
+                .eq(paymentMethod != null, "paymentMethod", paymentMethod)
+                .eq(status != null, "status", status)
+                .like(description != null, "description", description)
+                .orderBy(true, false, "createTime");
+        return wrapper;
+
+
     }
 }
 

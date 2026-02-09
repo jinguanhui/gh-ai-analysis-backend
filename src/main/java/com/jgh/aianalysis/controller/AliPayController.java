@@ -1,20 +1,29 @@
 package com.jgh.aianalysis.controller;
 
-import com.alipay.api.AlipayClient;
 import com.alipay.api.AlipayConfig;
-import com.alipay.api.DefaultAlipayClient;
 import com.alipay.api.internal.util.AlipaySignature;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.jgh.aianalysis.constant.PayStatusEnum;
+import com.jgh.aianalysis.exception.BusinessException;
+import com.jgh.aianalysis.modal.dto.AlipayQueryDto;
 import com.jgh.aianalysis.modal.dto.OrderPayDto;
 import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.service.AlipayService;
+import com.jgh.aianalysis.service.OrderService;
+import com.jgh.aianalysis.service.UserService;
 import com.jgh.ghcommon.common.BaseResponse;
+import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import java.nio.charset.StandardCharsets;
+
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,6 +40,15 @@ public class AliPayController {
 
     @Resource
     private AlipayConfig alipayConfig;
+
+    @Resource
+    private OrderService orderService;
+
+    @Resource
+    private UserService userService;
+
+    @Resource
+    private TransactionTemplate transactionTemplate;
 
     /**
      * 收银台点击结账
@@ -61,56 +79,174 @@ public class AliPayController {
             valueStr = new String(valueStr.getBytes(), StandardCharsets.UTF_8);
             params.put(name, valueStr);
         }
+
+
+        String subject = params.get("subject");
+        String tradeStatus = params.get("trade_status");
+        String tradeNo = params.get("trade_no");
+        String[] split = params.get("out_trade_no").split("\\|");
+        String outTradeNo = split[0];
+        String userId = split[1];
+        String totalAmount = params.get("total_amount");
+        String buyerId = params.get("buyer_id");
+        String gmtPayment = params.get("gmt_payment");
+        String buyerPayAmount = params.get("buyer_pay_amount");
+        log.info("系统用户ID ：{}", userId);
+
+
         //验签
         boolean signVerified = AlipaySignature.rsaCheckV1(params,
                 alipayConfig.getAlipayPublicKey(),
                 alipayConfig.getCharset(),
                 alipayConfig.getSignType());  //调用SDK验证签名
+        log.info("收到支付宝发送的支付结果通知");
+        logTransactionDetails(subject, tradeStatus, tradeNo, outTradeNo, totalAmount, buyerId, gmtPayment, buyerPayAmount);
+        Order order = new Order();
         if (signVerified) {
-            log.info("收到支付宝发送的支付结果通知");
-            logTransactionDetails(params);
-            String out_trade_no = request.getParameter("out_trade_no");
-            log.info("交易流水号：{}", out_trade_no);
-            //交易状态
-            String trade_status = new String(request.getParameter("trade_status").getBytes(), StandardCharsets.UTF_8);
             //交易成功
-            switch (trade_status) {
+            switch (tradeStatus) {
                 case "TRADE_SUCCESS":
                     //支付成功的业务逻辑，比如落库，开vip权限等
-                    log.info("订单：{} 交易成功", out_trade_no);
+                    log.info("订单：{} 交易成功", outTradeNo);
+                    //  比起@Transactional注解，使用TransactionTemplate，可以局部提交事务，不会出现数据不一致的情况
+                    //  而@Transactional它是在整个方法添加事务，如果事务中有耗时的操作，如：IO、网络，会导致事务迟迟不释放
+                    //  就会导致占用数据库连接，导致数据库连接数超限
+                    Boolean execute = transactionTemplate.execute(transactionStatus -> {
+                        handleUpdateOrder(order, outTradeNo, PayStatusEnum.SUCCESS.getStatus(), PayStatusEnum.SUCCESS.getDesc(), tradeNo);
+
+                        handleUpdateUser(userId);
+                        return true;
+                    });
+                    if (!execute) {
+                        log.error("更新订单失败");
+                        throw new BusinessException("更新订单失败");
+                    }
                     break;
                 case "TRADE_FINISHED":
-                    log.info("交易结束，不可退款");
+                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.FINISHED.getStatus(), PayStatusEnum.FINISHED.getDesc(), tradeNo);
+
                     //其余业务逻辑
                     break;
                 case "TRADE_CLOSED":
                     log.info("超时未支付，交易已关闭，或支付完成后全额退款");
+                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.CANCEL.getStatus(), "超时未支付，交易已关闭", tradeNo);
                     //其余业务逻辑
                     break;
                 case "WAIT_BUYER_PAY":
                     log.info("交易创建，等待买家付款");
                     //其余业务逻辑
+                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.AWAIT_PAY.getStatus(), PayStatusEnum.AWAIT_PAY.getDesc(), tradeNo);
                     break;
             }
+
             response.getWriter().write("success");   //返回success给支付宝，表示消息我已收到，不用重调
 
         } else {
-            response.getWriter().write("fail");   ///返回fail给支付宝，表示消息我没收到，请重试
+            log.info("收到支付宝发送的支付结果通知验签失败,将主动查询支付状态");
+//            response.getWriter().write("failure");   ///返回failure给支付宝，表示消息我没收到，请重试
+
+            switch (tradeStatus) {
+                case "TRADE_SUCCESS":
+                    //支付成功的业务逻辑，比如落库，开vip权限等
+                    log.info("订单：{} 交易成功", outTradeNo);
+
+                    Boolean execute = transactionTemplate.execute(transactionStatus -> {
+                        handleUpdateOrder(order, outTradeNo, PayStatusEnum.SUCCESS.getStatus(), PayStatusEnum.SUCCESS.getDesc(), tradeNo);
+                        handleUpdateUser(userId);
+                        return true;
+                    });
+                    if (!execute) {
+                        log.error("更新订单失败");
+                        throw new BusinessException("更新订单失败");
+                    }
+                    break;
+                case "TRADE_FINISHED":
+                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.FINISHED.getStatus(), PayStatusEnum.FINISHED.getDesc(), tradeNo);
+
+                    //其余业务逻辑
+                    break;
+                case "TRADE_CLOSED":
+                    log.info("超时未支付，交易已关闭，或支付完成后全额退款");
+                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.CANCEL.getStatus(), "超时未支付，交易已关闭", tradeNo);
+                    //其余业务逻辑
+                    break;
+                case "WAIT_BUYER_PAY":
+                    log.info("交易创建，等待买家付款");
+                    //其余业务逻辑
+                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.AWAIT_PAY.getStatus(), PayStatusEnum.AWAIT_PAY.getDesc(), tradeNo);
+                    break;
+            }
+
         }
     }
-    /**
-     * 记录交易详情的方法
-     *
-     * @param params
-     */
-    private void logTransactionDetails(Map<String, String> params) {
-        log.info("交易名称: " + params.get("subject"));
-        log.info("交易状态: " + params.get("trade_status"));
-        log.info("支付宝交易凭证号: " + params.get("trade_no"));
-        log.info("商户订单号: " + params.get("out_trade_no"));
-        log.info("交易金额: " + params.get("total_amount"));
-        log.info("买家在支付宝唯一id: " + params.get("buyer_id"));
-        log.info("买家付款时间: " + params.get("gmt_payment"));
-        log.info("买家付款金额: " + params.get("buyer_pay_amount"));
+
+    @PostMapping("/check_payInfo")
+    public BaseResponse checkTradeStatus(@RequestBody AlipayQueryDto alipayQueryDto, HttpServletRequest request) {
+        String outTradeNo = alipayQueryDto.getOutTradeNo();
+        alipayService.checkTradeStatus(outTradeNo);
+        return BaseResponse.success();
     }
+
+    private void handleUpdateUser(String userId) {
+        log.info("用户：{} 添加调用次数", userId);
+        UpdateWrapper<User> wrapper = new UpdateWrapper<>();
+        wrapper.eq("id", Long.parseLong(userId));
+        wrapper.setSql("invokeCount = invokeCount + 100");
+
+        boolean update = userService.update(wrapper);
+        if (!update) {
+            log.error("用户：{} 添加调用次数失败", userId);
+            throw new BusinessException("用户：{} 添加调用次数失败");
+        }
+    }
+
+    private void handleUpdateOrder(Order order, String outTradeNo, Integer tradeStatus, String desc, String tradeNo) {
+        log.info("更新订单");
+        order.setId(Long.parseLong(outTradeNo));
+        order.setStatus(tradeStatus);
+        order.setDescription(desc);
+        order.setUpdateTime(new Date());
+        order.setPayTime(new Date());
+        order.setAlipayTradeNo(tradeNo);
+
+        boolean b = orderService.updateById(order);
+        if (!b) {
+            log.error("更新订单失败");
+            throw new BusinessException("更新订单失败");
+        }
+    }
+
+    /**
+     * 记录交易信息
+     *
+     * @param subject
+     * @param tradeStatus
+     * @param tradeNo
+     * @param outTradeNo
+     * @param totalAmount
+     * @param buyerId
+     * @param gmtPayment
+     * @param buyerPayAmount
+     */
+    private void logTransactionDetails(String subject, String tradeStatus, String tradeNo, String outTradeNo, String totalAmount, String buyerId, String gmtPayment, String buyerPayAmount) {
+        /**
+         * 交易名称: 10元续费100次AI分析
+         * 交易状态: TRADE_SUCCESS
+         * 支付宝交易凭证号: 2026020922001425320508221254
+         * 商户订单号: 944165562627
+         * 交易金额: 10.00
+         * 买家在支付宝唯一id: 2088722094925327
+         * 买家付款时间: 2026-02-09 14:20:24
+         * 买家付款金额: 10.00
+         */
+        log.info("交易名称: " + subject);
+        log.info("交易状态: " + tradeStatus);
+        log.info("支付宝交易凭证号: " + tradeNo);
+        log.info("商户订单号: " + outTradeNo);
+        log.info("交易金额: " + totalAmount);
+        log.info("买家在支付宝唯一id: " + buyerId);
+        log.info("买家付款时间: " + gmtPayment);
+        log.info("买家付款金额: " + buyerPayAmount);
+    }
+
 }

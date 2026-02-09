@@ -60,7 +60,6 @@ public class MyInterceptor implements HandlerInterceptor {
         log.info("用户的请求IP:{}", IPUtils.getIpAddr(request));
         log.info("用户的请求头:{}", header);
         log.info("用户的Cookie:{}", cookie);
-        log.info("用户的请求地址:{}", localHost);
         log.info("用户的请求ServletPath:{}", url);
 
 //        if (auth == null || !auth.equals("ghai")) {
