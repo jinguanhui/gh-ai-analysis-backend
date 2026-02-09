@@ -7,6 +7,7 @@ import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.modal.dto.OrderDetailDto;
 import com.jgh.aianalysis.modal.dto.OrderPageDto;
 import com.jgh.aianalysis.modal.dto.OrderPayDto;
+import com.jgh.aianalysis.modal.dto.OrderUpdateDto;
 import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.mq.MyMessageProducer;
 import com.jgh.aianalysis.service.OrderService;
@@ -94,6 +95,37 @@ public class OrderController {
         return BaseResponse.success(order);
     }
 
+    @PostMapping("/changeStatus")
+    public BaseResponse<Boolean> changeOrderStatus(@RequestBody OrderUpdateDto orderUpdateDto, HttpServletRequest request) {
+        log.info("修改订单状态");
+        String userIdString = request.getHeader("userId");
+        if (userIdString == null) {
+            log.error("用户不存在");
+            throw new BusinessException("用户不存在");
+        }
+
+        Long userId = Long.parseLong(userIdString);
+
+        Long id = orderUpdateDto.getId();
+        Integer status = orderUpdateDto.getStatus();
+        String description = orderUpdateDto.getDescription();
+
+
+        Order order = new Order();
+        order.setId(id);
+        order.setUserId(userId);
+        order.setStatus(status);
+        order.setDescription(description);
+        order.setUpdateTime(new Date());
+
+        boolean b = orderService.updateById(order);
+        if (!b) {
+            log.error("修改订单状态失败");
+            throw new BusinessException("修改订单状态失败");
+        }
+        return BaseResponse.success(true);
+    }
+
     @PostMapping("/list/page")
     public BaseResponse<Page<Chart>> getOrderList(@RequestBody OrderPageDto orderPageDto, HttpServletRequest request) {
         log.info("分页获取订单列表");
@@ -112,20 +144,12 @@ public class OrderController {
 
     private QueryWrapper getQueryWrapper(OrderPageDto orderPageDto) {
 
-        Long id = orderPageDto.getId();
         Long userId = orderPageDto.getUserId();
-        Double money = orderPageDto.getMoney();
-        String paymentMethod = orderPageDto.getPaymentMethod();
         Integer status = orderPageDto.getStatus();
-        String description = orderPageDto.getDescription();
 
         QueryWrapper<Chart> wrapper = new QueryWrapper<>();
-        wrapper.eq(id != null && id > 0, "id", id)
-                .eq(userId != null, "userId", userId)
-                .eq(money != null, "money", money)
-                .eq(paymentMethod != null, "paymentMethod", paymentMethod)
+        wrapper.eq(userId != null, "userId", userId)
                 .eq(status != null, "status", status)
-                .like(description != null, "description", description)
                 .orderBy(true, false, "createTime");
         return wrapper;
 

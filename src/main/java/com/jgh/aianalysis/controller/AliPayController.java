@@ -11,6 +11,7 @@ import com.jgh.aianalysis.modal.entity.Order;
 import com.jgh.aianalysis.service.AlipayService;
 import com.jgh.aianalysis.service.OrderService;
 import com.jgh.aianalysis.service.UserService;
+import com.jgh.aianalysis.utils.RedisUtil;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.model.entity.User;
 import jakarta.annotation.Resource;
@@ -20,12 +21,16 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 支付宝接口
@@ -49,6 +54,9 @@ public class AliPayController {
 
     @Resource
     private TransactionTemplate transactionTemplate;
+
+    @Resource
+    private RedissonClient redissonClient;
 
     /**
      * 收银台点击结账
@@ -104,40 +112,7 @@ public class AliPayController {
         Order order = new Order();
         if (signVerified) {
             //交易成功
-            switch (tradeStatus) {
-                case "TRADE_SUCCESS":
-                    //支付成功的业务逻辑，比如落库，开vip权限等
-                    log.info("订单：{} 交易成功", outTradeNo);
-                    //  比起@Transactional注解，使用TransactionTemplate，可以局部提交事务，不会出现数据不一致的情况
-                    //  而@Transactional它是在整个方法添加事务，如果事务中有耗时的操作，如：IO、网络，会导致事务迟迟不释放
-                    //  就会导致占用数据库连接，导致数据库连接数超限
-                    Boolean execute = transactionTemplate.execute(transactionStatus -> {
-                        handleUpdateOrder(order, outTradeNo, PayStatusEnum.SUCCESS.getStatus(), PayStatusEnum.SUCCESS.getDesc(), tradeNo);
-
-                        handleUpdateUser(userId);
-                        return true;
-                    });
-                    if (!execute) {
-                        log.error("更新订单失败");
-                        throw new BusinessException("更新订单失败");
-                    }
-                    break;
-                case "TRADE_FINISHED":
-                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.FINISHED.getStatus(), PayStatusEnum.FINISHED.getDesc(), tradeNo);
-
-                    //其余业务逻辑
-                    break;
-                case "TRADE_CLOSED":
-                    log.info("超时未支付，交易已关闭，或支付完成后全额退款");
-                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.CANCEL.getStatus(), "超时未支付，交易已关闭", tradeNo);
-                    //其余业务逻辑
-                    break;
-                case "WAIT_BUYER_PAY":
-                    log.info("交易创建，等待买家付款");
-                    //其余业务逻辑
-                    handleUpdateOrder(order, outTradeNo, PayStatusEnum.AWAIT_PAY.getStatus(), PayStatusEnum.AWAIT_PAY.getDesc(), tradeNo);
-                    break;
-            }
+            handleCheckTradeStatus(tradeStatus, outTradeNo, order, tradeNo, userId);
 
             response.getWriter().write("success");   //返回success给支付宝，表示消息我已收到，不用重调
 
@@ -145,6 +120,32 @@ public class AliPayController {
             log.info("收到支付宝发送的支付结果通知验签失败,将主动查询支付状态");
 //            response.getWriter().write("failure");   ///返回failure给支付宝，表示消息我没收到，请重试
 
+            handleCheckTradeStatus(tradeStatus, outTradeNo, order, tradeNo, userId);
+
+        }
+    }
+
+    /**
+     * 主动查询支付宝支付结果
+     *
+     * @param alipayQueryDto
+     * @param request
+     * @return
+     */
+    @PostMapping("/check_payInfo")
+    public BaseResponse checkTradeStatus(@RequestBody AlipayQueryDto alipayQueryDto, HttpServletRequest request) {
+        String outTradeNo = alipayQueryDto.getOutTradeNo();
+        alipayService.checkTradeStatus(outTradeNo);
+        return BaseResponse.success();
+    }
+
+    private void handleCheckTradeStatus(String tradeStatus, String outTradeNo, Order order, String tradeNo, String userId) {
+        // 使用分布式锁确保同一订单不会并发处理
+        // 1.获取一把锁，只要锁的名字一样，就是同一把锁
+        RLock rLock = redissonClient.getLock(outTradeNo + "pay");
+        // 2.加锁
+        rLock.lock(); // 阻塞式等待
+        try {
             switch (tradeStatus) {
                 case "TRADE_SUCCESS":
                     //支付成功的业务逻辑，比如落库，开vip权限等
@@ -176,15 +177,17 @@ public class AliPayController {
                     handleUpdateOrder(order, outTradeNo, PayStatusEnum.AWAIT_PAY.getStatus(), PayStatusEnum.AWAIT_PAY.getDesc(), tradeNo);
                     break;
             }
+        } catch (TransactionException e) {
+            log.error("分布式事务异常", e);
+            throw new RuntimeException(e);
+        } catch (BusinessException e) {
+            log.error("业务异常", e);
+            throw new RuntimeException(e);
+        } finally {
+            rLock.unlock();
+            log.info("分布式锁释放成功");
 
         }
-    }
-
-    @PostMapping("/check_payInfo")
-    public BaseResponse checkTradeStatus(@RequestBody AlipayQueryDto alipayQueryDto, HttpServletRequest request) {
-        String outTradeNo = alipayQueryDto.getOutTradeNo();
-        alipayService.checkTradeStatus(outTradeNo);
-        return BaseResponse.success();
     }
 
     private void handleUpdateUser(String userId) {
