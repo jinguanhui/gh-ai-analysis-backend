@@ -3,14 +3,17 @@ package com.jgh.aianalysis.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jgh.aianalysis.constant.PayStatusEnum;
+import com.jgh.aianalysis.constant.SystemNotificationStatusEnum;
 import com.jgh.aianalysis.exception.BusinessException;
 import com.jgh.aianalysis.modal.dto.OrderDetailDto;
 import com.jgh.aianalysis.modal.dto.OrderPageDto;
 import com.jgh.aianalysis.modal.dto.OrderPayDto;
 import com.jgh.aianalysis.modal.dto.OrderUpdateDto;
 import com.jgh.aianalysis.modal.entity.Order;
+import com.jgh.aianalysis.modal.entity.SystemNotification;
 import com.jgh.aianalysis.mq.MyMessageProducer;
 import com.jgh.aianalysis.service.OrderService;
+import com.jgh.aianalysis.service.SystemNotificationService;
 import com.jgh.ghcommon.common.BaseResponse;
 import com.jgh.ghcommon.model.entity.Chart;
 import jakarta.annotation.Resource;
@@ -38,6 +41,9 @@ public class OrderController {
     @Resource
     private MyMessageProducer myMessageProducer;
 
+    @Resource
+    private SystemNotificationService systemNotificationService;
+
     @PostMapping("/create")
     public BaseResponse<Boolean> createOrder(@RequestBody OrderPayDto orderPayDto, HttpServletRequest request) {
         log.info("创建订单");
@@ -47,6 +53,18 @@ public class OrderController {
             throw new BusinessException("用户不存在");
         }
         Long userId = Long.parseLong(userIdString);
+
+        // 查询是否有未支付的订单
+        QueryWrapper<Order> wrapper = new QueryWrapper<>();
+        wrapper.eq("userId", userId)
+                .eq("status", PayStatusEnum.AWAIT_PAY.getStatus());
+
+        Order one = orderService.getOne(wrapper);
+
+        if (one != null) {
+            log.error("您有未支付的订单");
+            throw new BusinessException("您有未支付的订单");
+        }
 
         Order order = new Order();
         order.setId(orderPayDto.getId());
@@ -67,6 +85,19 @@ public class OrderController {
         objectObjectHashMap.put("orderId", orderPayDto.getId());
         objectObjectHashMap.put("userId", userId);
         myMessageProducer.sendMessage(ORDER_EXCHANGE_NAME, ORDER_ROUTING_KEY, objectObjectHashMap);
+
+        SystemNotification systemNotification = new SystemNotification();
+        systemNotification.setUserId(userId);
+        systemNotification.setTitle("订单已创建");
+        systemNotification.setContent("订单在15分钟之后将会取消，请尽快前往<a> 订单消息 </a>去进行支付");
+        systemNotification.setRelatedId(orderPayDto.getId());
+        systemNotification.setIsRead(SystemNotificationStatusEnum.UNREAD.getStatus());
+        boolean save1 = systemNotificationService.save(systemNotification);
+        if (!save1) {
+            log.error("创建系统消息失败");
+            throw new BusinessException("创建系统消息失败");
+        }
+
         return BaseResponse.success(true);
     }
 
