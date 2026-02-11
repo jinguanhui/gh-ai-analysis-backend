@@ -16,11 +16,12 @@
         <result property="payTime" column="payTime"/>
         <result property="isDelete" column="isDelete"/>
         <result property="alipayTradeNo" column="alipayTradeNo"/>
+        <result property="refundNo" column="refundNo"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id
         ,userId,money,paymentMethod,status,description,
-        createTime,updateTime,isDelete,payTime,alipayTradeNo
+        createTime,updateTime,isDelete,payTime,alipayTradeNo,refundNo
     </sql>
 </mapper>

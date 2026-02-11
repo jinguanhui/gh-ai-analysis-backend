@@ -150,7 +150,7 @@ public class OrderController {
         QueryWrapper<Chart> wrapper = new QueryWrapper<>();
         wrapper.eq(userId != null, "userId", userId)
                 .eq(status != null, "status", status)
-                .orderBy(true, false, "createTime");
+                .orderBy(true, false, "updateTime");
         return wrapper;
 
 

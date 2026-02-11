@@ -37,6 +37,7 @@ public class Order {
      * 支付方式
      */
     private String paymentMethod;
+    private String refundNo;
 
     /**
      * 0-待支付，1-已支付，2-退款，3-已取消

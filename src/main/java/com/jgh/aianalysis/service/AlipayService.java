@@ -13,4 +13,6 @@ public interface AlipayService {
      * @param outTradeNo
      */
     void checkTradeStatus(String outTradeNo);
+
+    void refund(String outTradeNo);
 }

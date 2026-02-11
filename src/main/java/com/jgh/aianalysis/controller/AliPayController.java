@@ -139,6 +139,13 @@ public class AliPayController {
         return BaseResponse.success();
     }
 
+    @PostMapping("/refund")
+    public BaseResponse refund(@RequestBody AlipayQueryDto alipayQueryDto, HttpServletRequest request) {
+        String outTradeNo = alipayQueryDto.getOutTradeNo();
+        alipayService.refund(outTradeNo);
+        return BaseResponse.success();
+    }
+
     private void handleCheckTradeStatus(String tradeStatus, String outTradeNo, Order order, String tradeNo, String userId) {
         // 使用分布式锁确保同一订单不会并发处理
         // 1.获取一把锁，只要锁的名字一样，就是同一把锁
