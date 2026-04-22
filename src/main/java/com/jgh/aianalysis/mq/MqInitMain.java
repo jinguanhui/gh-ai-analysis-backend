@@ -18,7 +18,10 @@ public class MqInitMain {
         try {
             // 创建连接工厂
             ConnectionFactory factory = new ConnectionFactory();
-            factory.setHost("localhost");
+            factory.setHost("119.91.68.39");
+            factory.setPort(5672); // RabbitMQ默认端口（显式指定，避免默认值问题）
+            factory.setUsername("admin"); // 替换为你创建的RabbitMQ用户名（不要用guest）
+            factory.setPassword("jxlSKVsQsbPab6N3"); // 替换为你的密码
             // 创建连接
             Connection connection = factory.newConnection();
             // 创建通道
@@ -47,6 +50,7 @@ public class MqInitMain {
             channel.queueBind(QUEUE_NAME, EXCHANGE_NAME, ROUTING_KEY);
             channel.queueBind(DEAD_LETTER_QUEUE_NAME, DEAD_LETTER_EXCHANGE_NAME, DEAD_LETTER_ROUTING_KEY);
         } catch (Exception e) {
+            e.printStackTrace();
             // 异常处理
         }
     }

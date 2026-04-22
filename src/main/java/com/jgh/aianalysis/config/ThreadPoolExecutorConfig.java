@@ -59,11 +59,11 @@ public class ThreadPoolExecutorConfig implements AsyncConfigurer {
         };
 
         return new ThreadPoolExecutor(
-                10, // 核心线程数
-                20, // 最大线程数
+                2, // 核心线程数
+                2, // 最大线程数
                 60L, // 空闲线程存活时间
                 java.util.concurrent.TimeUnit.SECONDS, // 时间单位
-                new java.util.concurrent.LinkedBlockingQueue<>(1000), // 工作队列
+                new java.util.concurrent.LinkedBlockingQueue<>(2), // 工作队列
                 threadFactory, // 线程工厂
                 new ThreadPoolExecutor.CallerRunsPolicy() // 拒绝策略
         );

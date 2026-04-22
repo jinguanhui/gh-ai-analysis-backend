@@ -83,6 +83,7 @@ public class MyDeadLetterConsumer {
         String originalFilename = message.get("originalFilename").toString();
 
         GhFile ghFile = new GhFile();
+        ghFile.setChartId(chartResultId);
         ghFile.setFileName(originalFilename);
         ghFile.setFileExcel(fileBytes);
         boolean save = ghFileService.save(ghFile);

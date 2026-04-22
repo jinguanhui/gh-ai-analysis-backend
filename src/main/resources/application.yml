@@ -6,8 +6,8 @@ spring:
   rabbitmq:
     port: 5672
     host: localhost
-    username: guest
-    password: guest
+    username: xxx
+    password: xxx
     listener:
       simple:
         prefetch: 2 # 设置qos最大缓存数，预接受10个消息到缓存中
@@ -15,9 +15,9 @@ spring:
         max-concurrency: 4
   mail:
     # 发送者邮箱
-    username: 2708637848@qq.com
+    username: xxx
     #申请到的授权码
-    password: lqrcewcbzuwzdgfi
+    password: xxx
     # 配置 SMTP 服务器地址
     host: smtp.qq.com
     # 端口号465或587
@@ -36,7 +36,7 @@ spring:
   # application.yml
   ai:
     dashscope:
-      api-key: sk-f22e48e3c1b543b3a664ba81fe89bdc0
+      api-key: xxxxxxxxx
       # 连接超时配置
       connect-timeout: 30
       read-timeout: 60
@@ -59,8 +59,8 @@ spring:
     name: gh_ai_analysis
   datasource:
     driver-class-name: com.mysql.jdbc.Driver
-    username: root
-    password: 1234
+    username: xxxx
+    password: xxxxx
     url: jdbc:mysql://localhost:3306/gh_ai_analysis
   data:
     redis:
@@ -82,9 +82,9 @@ alipay:
   # 应用公钥，用于验证支付宝的响应
   alipayPublicKey: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnhCOA0j2sa6Ur9lfgaM7UN8Z5BesiyI/U7Wau9TFTf/LTfsiCtFkOanUYHJKNsYc9wiAHyzTRRgh05z+LIOIpha2cPOz7HeOjIaO79V1ZZBY+/SGzTARSaWrvpXtAB6Mtggk8ibPdYX2LZZoIvJpUocqP3xgd5+jp9Hw8L3FPiJ/8W+xGTBNh+66L1gx/VHSYWk9BgEQJZCqeJrWu79ONEZ8C3kS7hdPfqupSFY0xmJiLgML0l6oWa74DWRmvM/ywEYs4d3bYq3jFLFJJcWk0pMEskE/ygLhyc5CnPrX+6L4qeipIGXkzG8irt/MuHG+k6lqus5rgpZKvjeQXTaYqQIDAQAB
   # 支付通知的回调地址，支付宝会在支付完成后通知这个地址
-  notifyUrl: http://y69c87e6.natappfree.cc/api/alipay/notify
+  notifyUrl: http://119.91.68.39:8123/api/alipay/notify
   # 页面跳转地址，支付完成后跳转到此URL
-  returnUrl: http://127.0.0.1:3000/user/center
+  returnUrl: http://119.91.68.39:3000/user/center
 #  returnUrl: https://www.baidu.com
   # 签名类型，通常为RSA2
   signType: RSA2
@@ -96,7 +96,7 @@ alipay:
 
 # searchApi
 search-api:
-  api-key: 1D5oZXDWLkY2Q57N5hXrYPac
+  api-key: xxx
 
 server:
   port: 8123
@@ -116,17 +116,17 @@ mybatis-plus:
 
 aliyun:
   dypnsapi:
-    access-key-id: LTAI5tDrz8uACCj1WEndWA9F
-    access-key-secret: 3zkKT5wsf4VopttTrEEGXyQrvEiyuW
+    access-key-id: xxx
+    access-key-secret: xx
   green:
-    accessKeyId: LTAI5t8X1sC4BHN8a9yjWHxD
-    accessSecret: naEV3KuS2isJn6Og1EO9VuaswGww8u
+    accessKeyId: xx
+    accessSecret: xx
   oss:
-    accessKey: LTAI5t8X1sC4BHN8a9yjWHxD
-    secretKey: naEV3KuS2isJn6Og1EO9VuaswGww8u
-    bucketName: ai-analysis-jgh
-    endpoint: https://oss-cn-shenzhen.aliyuncs.com
-    region: cn-shenzhen
+    accessKey: xx
+    secretKey: xx
+    bucketName: ai-xx-jgh
+    endpoint: https://oss-xx-shenzhen.aliyuncs.com
+    region: cn-xx
 
 springdoc:
   swagger-ui:

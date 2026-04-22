@@ -8,6 +8,7 @@ import org.lionsoul.ip2region.xdb.InetAddressException;
 import org.lionsoul.ip2region.xdb.XdbException;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 public class IPRealRegionUtil {
 
@@ -16,13 +17,18 @@ public class IPRealRegionUtil {
 // 1, 创建 v4 的配置：指定缓存策略和 v4 的 xdb 文件路径
         final Config v4Config;    // 指定为 v4 配置
         try {
+            // 修改为
+            InputStream is = IPRealRegionUtil.class.getResourceAsStream("/ipdb/ip2region_v4.xdb");
+            if (is == null) {
+                throw new RuntimeException("ip2region_v4.xdb 文件未找到");
+            }
             v4Config = Config.custom()
-                    .setCachePolicy(Config.VIndexCache)     // 指定缓存策略:  NoCache / VIndexCache / BufferCache
+                    .setCachePolicy(Config.BufferCache)     // 指定缓存策略:  NoCache / VIndexCache / BufferCache
                     .setSearchers(15)                       // 设置初始化的查询器数量
                     // .setCacheSliceBytes(int)             // 设置缓存的分片字节数，默认为 50MiB
-                    // .setXdbInputStream(InputStream)      // 设置 v4 xdb 文件的 inputstream 对象
+                     .setXdbInputStream(is)      // 设置 v4 xdb 文件的 inputstream 对象
                     // .setXdbFile(File)                    // 设置 v4 xdb File 对象
-                    .setXdbPath("src/main/resources/ipdb/ip2region_v4.xdb")    // 设置 v4 xdb 文件的路径
+//                    .setXdbPath("src/main/resources/ipdb/ip2region_v4.xdb")    // 设置 v4 xdb 文件的路径
                     .asV4();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -35,13 +41,17 @@ public class IPRealRegionUtil {
 // 2, 创建 v6 的配置：指定缓存策略和 v6 的 xdb 文件路径
         final Config v6Config;    // 指定为 v6 配置
         try {
+            InputStream isV6 = IPRealRegionUtil.class.getResourceAsStream("/ipdb/ip2region_v6.xdb");
+            if (isV6 == null) {
+                throw new RuntimeException("ip2region_v6.xdb 文件未找到");
+            }
             v6Config = Config.custom()
-                    .setCachePolicy(Config.VIndexCache)     // 指定缓存策略: NoCache / VIndexCache / BufferCache
-                    .setSearchers(15)                       // 设置初始化的查询器数量
+                    .setCachePolicy(Config.BufferCache)     // 指定缓存策略: NoCache / VIndexCache / BufferCache
+                    .setSearchers(15)                    // 设置初始化的查询器数量
                     // .setCacheSliceBytes(int)             // 设置缓存的分片字节数，默认为 50MiB
-                    // .setXdbInputStream(InputStream)      // 设置 v6 xdb 文件的 inputstream 对象
+                    .setXdbInputStream(isV6)
                     // .setXdbFile(File)                    // 设置 v6 xdb File 对象
-                    .setXdbPath("src/main/resources/ipdb/ip2region_v6.xdb")    // 设置 v6 xdb 文件的路径
+//                    .setXdbPath("src/main/resources/ipdb/ip2region_v6.xdb")    // 设置 v6 xdb 文件的路径
                     .asV6();
         } catch (IOException e) {
             throw new RuntimeException(e);

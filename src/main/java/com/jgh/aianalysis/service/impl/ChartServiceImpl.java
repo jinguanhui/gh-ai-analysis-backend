@@ -111,11 +111,7 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
                                                  GenChartByAiRequest genChartByAiRequest,
                                                  HttpServletRequest request) {
 
-        int size1 = threadPoolExecutorRetry.getActiveCount();
-        if (size1 == 5) {
-            log.error("当前系统繁忙，请稍后再试！");
-            throw new BusinessException("当前系统繁忙，请稍后再试！");
-        }
+
 
         String name = genChartByAiRequest.getName();
         String goal = genChartByAiRequest.getGoal();
@@ -148,6 +144,23 @@ public class ChartServiceImpl extends ServiceImpl<ChartMapper, Chart>
 
         biResponse.setChartId(chartResult.getId());
 
+        int size1 = threadPoolExecutorRetry.getActiveCount();
+        if (size1 == 5) {
+            log.error("当前系统繁忙，请稍后再试！");
+            GhFile ghFile = new GhFile();
+
+            ghFile.setChartId(chartResult.getId());
+            ghFile.setFileExcel(fileBytes1);
+            ghFile.setFileName(originalFilename);
+
+            int insert = ghFileMapper.insert(ghFile);
+            if (insert <= 0) {
+                log.error("插入文件失败！");
+                handleSseError(baseResponse, "插入文件失败！", taskId);
+                throw new BusinessException("插入文件失败！");
+            }
+            throw new BusinessException("当前系统繁忙，请稍后再试！");
+        }
 
         //  异步提交任务
         try {
